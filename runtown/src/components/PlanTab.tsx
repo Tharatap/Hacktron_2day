@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../state/AppContext';
+import { callGemini } from '../lib/gemini';
 import type { PlanDay, PlanDayType } from '../types';
 
 const TYPE_LABEL: Record<PlanDayType, string> = {
@@ -48,16 +49,20 @@ export const PlanTab: React.FC = () => {
     });
   };
 
-  // callGemini() ยังไม่ implement (ดู STATE_DESIGN.md — ยัง TODO อยู่) จำลอง flow ให้ครบวงจรไปก่อนด้วย PLAN_ERROR ที่บอกตรงๆ ว่ายังไม่เชื่อมจริง
   const handleGeneratePlan = () => {
     dispatch({ type: 'PLAN_LOADING' });
     setShowEditModal(false);
-    window.setTimeout(() => {
-      dispatch({
-        type: 'PLAN_ERROR',
-        error: `ยังไม่ได้เชื่อมต่อ AI จริง (callGemini() รอ implement) — ขอไว้: ${customDistance} กม. ใน ${customDays} วัน`,
-      });
-    }, 900);
+    callGemini({
+      goalKm: customDistance,
+      days: customDays,
+      constraints: customNotes,
+      paceTier: state.user.paceTier,
+      zones: state.zones.map((z) => ({ id: z.id, name: z.name, district: z.district })),
+    })
+      .then((plan) => dispatch({ type: 'PLAN_READY', plan }))
+      .catch((err) =>
+        dispatch({ type: 'PLAN_ERROR', error: err instanceof Error ? err.message : 'เรียก AI ไม่สำเร็จ' })
+      );
   };
 
   const totalDoneKm = plan
