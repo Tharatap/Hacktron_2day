@@ -93,3 +93,25 @@
 .confetti {
   animation: drift 4s linear infinite;
 }
+
+/* ActiveRunScreen parallax — container ต้องมีเนื้อหาซ้ำกัน 2 ชุดเรียงแนวนอน (กว้างรวม 200%)
+   ห้ามลบโครงสร้าง "ซ้ำเนื้อหา 2 ชุด" นี้ทิ้ง ไม่งั้น loop จะมีรอยต่อ */
+@keyframes scroll-loop-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-scroll-v-slow { animation: scroll-loop-x 60s linear infinite; }
+.animate-scroll-slow   { animation: scroll-loop-x 30s linear infinite; }
+.animate-scroll-mid    { animation: scroll-loop-x 20s linear infinite; }
+
+@keyframes scroll-bg {
+  from { background-position: 0 0; }
+  to   { background-position: -160px 0; }
+}
+.animate-scroll-fast { animation: scroll-bg 2s linear infinite; }
+
+@keyframes spin-y {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+.animate-spin-y { animation: spin-y 1.5s linear infinite; }

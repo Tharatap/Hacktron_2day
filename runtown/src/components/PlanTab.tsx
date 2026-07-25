@@ -1,270 +1,264 @@
 import React, { useState } from 'react';
-import { TrainingDay } from '../types';
-import { DEFAULT_TRAINING_DAYS } from '../data/mockData';
+import { useApp } from '../state/AppContext';
+import type { PlanDay, PlanDayType } from '../types';
+
+const TYPE_LABEL: Record<PlanDayType, string> = {
+  easy: 'EASY',
+  tempo: 'TEMPO',
+  long: 'LONG',
+  rest: 'REST',
+};
+
+const TYPE_COLOR: Record<PlanDayType, string> = {
+  easy: 'bg-[#A3E4FF]',
+  tempo: 'bg-[#FFD84D]',
+  long: 'bg-[#80fbac]',
+  rest: 'bg-[#e5f8eb]',
+};
+
+function dayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+}
+
+function dateNum(iso: string): string {
+  return String(new Date(iso).getDate()).padStart(2, '0');
+}
 
 export const PlanTab: React.FC = () => {
-  const [goalKm, setGoalKm] = useState<number>(100);
-  const [goalNotes, setGoalNotes] = useState<string>('Window: 5 days • Notes: เรียนถึง 5 โมงเย็น อังคารกับพฤหัส');
-  const [aiInsight, setAiInsight] = useState<string>('“ซ้อมหนัก 2 วัน ลงยาววันเสาร์ และพักก่อนหนึ่งวัน”');
-  const [schedule, setSchedule] = useState<TrainingDay[]>(DEFAULT_TRAINING_DAYS);
-  const [showEditModal, setShowEditModal] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const { state, dispatch } = useApp();
+  const { planner } = state;
 
-  // Form states for custom AI plan recalculation
-  const [customDistance, setCustomDistance] = useState<number>(100);
-  const [customDays, setCustomDays] = useState<number>(5);
-  const [customNotes, setCustomNotes] = useState<string>('เรียนถึง 5 โมงเย็น อังคารกับพฤหัส');
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  // ฟอร์มกรอกก่อนสร้างแผน — เป็น UI input ล้วนๆ ยังไม่ใช่ business data จนกว่าจะกด generate
+  const [customDistance, setCustomDistance] = useState(100);
+  const [customDays, setCustomDays] = useState(5);
+  const [customNotes, setCustomNotes] = useState('เรียนถึง 5 โมงเย็น อังคารกับพฤหัส');
+  // ไม่มี action สำหรับ toggle วันที่ทำเสร็จใน AppContext.tsx (ไม่ใช่ business data ตาม contract) เก็บ local เฉยๆ
+  const [completedDates, setCompletedDates] = useState<Set<string>>(new Set());
 
-  const totalDoneKm = schedule.reduce((sum, d) => (d.isCompleted ? sum + d.distanceKm : sum), 12.2);
+  const plan = planner.plan;
+  const isGenerating = planner.status === 'loading';
 
-  const toggleDayComplete = (id: string) => {
-    setSchedule((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, isCompleted: !item.isCompleted } : item
-      )
-    );
+  const toggleDayComplete = (date: string) => {
+    setCompletedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
   };
 
+  // callGemini() ยังไม่ implement (ดู STATE_DESIGN.md — ยัง TODO อยู่) จำลอง flow ให้ครบวงจรไปก่อนด้วย PLAN_ERROR ที่บอกตรงๆ ว่ายังไม่เชื่อมจริง
   const handleGeneratePlan = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setGoalKm(customDistance);
-      setGoalNotes(`Window: ${customDays} days • Notes: ${customNotes}`);
-      setAiInsight(`“จัดแผนวิ่ง ${customDays} วัน เน้นโซน 2 เพื่อเพิ่มความฟิตโดยไม่ล้าเกินไป”`);
-      
-      // Dynamic schedule updates
-      setSchedule([
-        {
-          id: 'day-1',
-          day: 'MON',
-          dateNum: '27',
-          type: 'EASY',
-          typeColorBg: 'bg-[#A3E4FF]',
-          distanceKm: Math.round(customDistance * 0.1),
-          locationNotes: 'หาดบางแสน จ๊อกกิ้งเบาๆ',
-          timeRange: '18:00 - 18:45',
-          isCompleted: true
-        },
-        {
-          id: 'day-2',
-          day: 'TUE',
-          dateNum: '28',
-          type: 'REST',
-          typeColorBg: 'bg-[#e5f8eb]',
-          distanceKm: 0,
-          locationNotes: 'พักผ่อน ยืดเหยียดกล้ามเนื้อ',
-          isCompleted: false
-        },
-        {
-          id: 'day-3',
-          day: 'WED',
-          dateNum: '29',
-          type: 'TEMPO',
-          typeColorBg: 'bg-[#FFD84D]',
-          distanceKm: Math.round(customDistance * 0.15),
-          locationNotes: 'สนาม ม.เกษตร ศรีราชา (Interval)',
-          timeRange: '17:30 - 18:30',
-          isCompleted: false
-        },
-        {
-          id: 'day-4',
-          day: 'THU',
-          dateNum: '30',
-          type: 'EASY',
-          typeColorBg: 'bg-[#A3E4FF]',
-          distanceKm: Math.round(customDistance * 0.12),
-          locationNotes: 'เกาะลอย ศรีราชา รับลมเย็น',
-          timeRange: '18:30 - 19:15',
-          isCompleted: false
-        },
-        {
-          id: 'day-5',
-          day: 'SAT',
-          dateNum: '01',
-          type: 'LONG',
-          typeColorBg: 'bg-[#80fbac]',
-          distanceKm: Math.round(customDistance * 0.25),
-          locationNotes: 'อ่างเก็บน้ำบางพระ (Long Run)',
-          timeRange: '05:30 - 07:30',
-          isCompleted: false
-        }
-      ]);
-
-      setIsGenerating(false);
-      setShowEditModal(false);
-      triggerToast('✨ AI สร้างแผนซ้อมใหม่เรียบร้อยแล้ว!');
-    }, 1000);
+    dispatch({ type: 'PLAN_LOADING' });
+    setShowEditModal(false);
+    window.setTimeout(() => {
+      dispatch({
+        type: 'PLAN_ERROR',
+        error: `ยังไม่ได้เชื่อมต่อ AI จริง (callGemini() รอ implement) — ขอไว้: ${customDistance} กม. ใน ${customDays} วัน`,
+      });
+    }, 900);
   };
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
+  const totalDoneKm = plan
+    ? plan.schedule.filter((d) => completedDates.has(d.date)).reduce((sum, d) => sum + d.targetKm, 0)
+    : 0;
+
+  const daysLeft = plan
+    ? plan.schedule.filter((d) => new Date(d.date) >= new Date(new Date().toDateString())).length
+    : 0;
 
   return (
     <div className="flex flex-col w-full gap-5 pb-12">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#006a3a] text-white px-5 py-2.5 rounded-full border-2 border-[#14241C] hard-shadow font-headline-md text-sm animate-bounce">
-          {toastMessage}
+      {planner.status === 'error' && planner.error && (
+        <div className="bg-[#ffdad6] border-2 border-[#93000a] text-[#93000a] rounded-xl p-3 text-sm font-body-md">
+          ⚠️ {planner.error}
         </div>
       )}
 
-      {/* Goal Summary Header Card */}
-      <div className="bg-[#FFD84D] border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-start justify-between relative overflow-hidden">
-        <div className="flex flex-col gap-1 pr-12">
-          <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[#14241C] text-[20px]">target</span>
-            <span className="font-headline-md text-lg uppercase text-[#14241C]">
-              MY GOAL: {goalKm} KM
-            </span>
-          </div>
-          <p className="font-handwritten-sm text-sm text-[#231b00] opacity-90 leading-tight">
-            {goalNotes}
+      {!plan ? (
+        // ยังไม่มีแผนซ้อม (state.planner.plan เป็น null) — ไม่มี mock data ให้โชว์เหมือนหน้าอื่น
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-[#3d4a40]">calendar_month</span>
+          <p className="font-body-md text-[#3d4a40]">
+            {isGenerating ? 'กำลังคำนวณแผน... ⏳' : 'ยังไม่มีแผนซ้อม กดสร้างแผนด้วย AI เพื่อเริ่มต้น'}
           </p>
-        </div>
-
-        <button
-          onClick={() => setShowEditModal(true)}
-          className="bg-white border-2 border-[#14241C] px-3 py-1 rounded-full hard-shadow flex items-center gap-1 active:translate-y-[2px] transition-transform hover:bg-gray-50"
-        >
-          <span className="material-symbols-outlined text-sm">edit</span>
-          <span className="font-label-md text-xs font-bold">Edit</span>
-        </button>
-      </div>
-
-      {/* AI Insight Message */}
-      <div className="flex items-center gap-3 px-1">
-        <div className="bg-[#006a3a] p-1.5 rounded-full border-2 border-[#14241C] animate-bounce flex-shrink-0">
-          <span className="material-symbols-outlined text-white text-[20px]">auto_awesome</span>
-        </div>
-        <p className="font-body-md text-sm italic text-[#14241C] font-semibold">
-          {aiInsight}
-        </p>
-      </div>
-
-      {/* Progress Tracker */}
-      <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4">
-        <div className="flex justify-between items-end mb-2">
-          <div className="flex flex-col">
-            <span className="font-label-md text-xs text-[#3d4a40] uppercase opacity-70">
-              PROGRESS
-            </span>
-            <span className="font-headline-md text-2xl text-[#14241C]">
-              {totalDoneKm.toFixed(1)}{' '}
-              <span className="text-sm font-normal text-[#3d4a40]">/ {goalKm} km</span>
-            </span>
-          </div>
-
-          <div className="text-right">
-            <span className="bg-[#ffdad6] text-[#93000a] font-label-md text-xs px-3 py-1 rounded-full border-2 border-[#14241C] font-bold">
-              เหลืออีก 4 วัน
-            </span>
-          </div>
-        </div>
-
-        {/* Progress Bar with Runner Marker */}
-        <div className="relative h-6 bg-[#dff3e5] border-2 border-[#14241C] rounded-full overflow-hidden">
-          <div
-            className="h-full bg-[#006a3a] transition-all duration-500"
-            style={{ width: `${Math.min(100, (totalDoneKm / goalKm) * 100)}%` }}
-          />
-
-          <div
-            className="absolute top-0 flex items-center justify-center h-full transition-all duration-500"
-            style={{
-              left: `${Math.min(92, Math.max(8, (totalDoneKm / goalKm) * 100))}%`,
-              transform: 'translateX(-50%)'
-            }}
+          <button
+            onClick={() => setShowEditModal(true)}
+            disabled={isGenerating}
+            className="bg-[#006a3a] text-white px-6 py-3 rounded-full border-2 border-[#14241C] hard-shadow font-headline-md disabled:opacity-50"
           >
-            <div className="w-10 h-10 bg-white border-2 border-[#14241C] rounded-full hard-shadow rotate-[12deg] flex items-center justify-center -mt-1">
-              <span className="material-symbols-outlined text-[#006a3a] text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                directions_run
-              </span>
-            </div>
-          </div>
+            {isGenerating ? 'กำลังสร้าง...' : '🤖 สร้างแผนซ้อมด้วย AI'}
+          </button>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Goal Summary Header Card */}
+          <div className="bg-[#FFD84D] border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-start justify-between relative overflow-hidden">
+            <div className="flex flex-col gap-1 pr-12">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[#14241C] text-[20px]">target</span>
+                <span className="font-headline-md text-lg uppercase text-[#14241C]">
+                  MY GOAL: {plan.goalKm} KM
+                </span>
+              </div>
+              <p className="font-handwritten-sm text-sm text-[#231b00] opacity-90 leading-tight">
+                Window: {plan.days} days • Notes: {plan.constraints}
+              </p>
+            </div>
 
-      {/* Training Schedule Cards */}
-      <div className="flex flex-col gap-3">
-        {schedule.map((item, index) => {
-          const isEven = index % 2 === 0;
-          const rotation = isEven ? 'rotate-[-1deg]' : 'rotate-[1.5deg]';
-
-          return (
-            <div
-              key={item.id}
-              onClick={() => toggleDayComplete(item.id)}
-              className={`bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-center gap-4 ${rotation} hover:rotate-0 transition-transform cursor-pointer ${
-                item.isCompleted ? 'opacity-80' : ''
-              }`}
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="bg-white border-2 border-[#14241C] px-3 py-1 rounded-full hard-shadow flex items-center gap-1 active:translate-y-[2px] transition-transform hover:bg-gray-50"
             >
-              <div className="flex flex-col items-center min-w-[50px]">
-                <span className="font-label-md text-xs text-[#3d4a40] font-bold">{item.day}</span>
-                <span className="font-headline-md text-2xl font-bold">{item.dateNum}</span>
+              <span className="material-symbols-outlined text-sm">edit</span>
+              <span className="font-label-md text-xs font-bold">Edit</span>
+            </button>
+          </div>
+
+          {/* AI Insight Message */}
+          {plan.summary && (
+            <div className="flex items-center gap-3 px-1">
+              <div className="bg-[#006a3a] p-1.5 rounded-full border-2 border-[#14241C] animate-bounce flex-shrink-0">
+                <span className="material-symbols-outlined text-white text-[20px]">auto_awesome</span>
+              </div>
+              <p className="font-body-md text-sm italic text-[#14241C] font-semibold">
+                “{plan.summary}”
+              </p>
+            </div>
+          )}
+
+          {/* Progress Tracker */}
+          <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4">
+            <div className="flex justify-between items-end mb-2">
+              <div className="flex flex-col">
+                <span className="font-label-md text-xs text-[#3d4a40] uppercase opacity-70">
+                  PROGRESS
+                </span>
+                <span className="font-headline-md text-2xl text-[#14241C]">
+                  {totalDoneKm.toFixed(1)}{' '}
+                  <span className="text-sm font-normal text-[#3d4a40]">/ {plan.goalKm} km</span>
+                </span>
               </div>
 
-              <div className="h-10 w-[2px] bg-[#bccabd]" />
-
-              <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`${item.typeColorBg} px-2.5 py-0.5 border-2 border-[#14241C] rounded-full font-label-md text-[10px] font-bold uppercase`}>
-                    {item.type}
-                  </span>
-                  <span className="font-headline-md text-base font-bold">
-                    {item.distanceKm} km
-                  </span>
-                </div>
-
-                <p className="font-body-md text-xs text-[#3d4a40] truncate">
-                  {item.locationNotes}
-                </p>
-
-                {item.timeRange && (
-                  <span className="font-label-md text-[10px] text-[#3d4a40]/80">
-                    ⏰ {item.timeRange}
-                  </span>
-                )}
+              <div className="text-right">
+                <span className="bg-[#ffdad6] text-[#93000a] font-label-md text-xs px-3 py-1 rounded-full border-2 border-[#14241C] font-bold">
+                  เหลืออีก {daysLeft} วัน
+                </span>
               </div>
+            </div>
+
+            {/* Progress Bar with Runner Marker */}
+            <div className="relative h-6 bg-[#dff3e5] border-2 border-[#14241C] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#006a3a] transition-all duration-500"
+                style={{ width: `${Math.min(100, (totalDoneKm / plan.goalKm) * 100)}%` }}
+              />
 
               <div
-                className={`w-8 h-8 rounded-full border-2 border-[#14241C] flex items-center justify-center transition-all ${
-                  item.isCompleted ? 'bg-[#006a3a]' : 'bg-white'
-                }`}
+                className="absolute top-0 flex items-center justify-center h-full transition-all duration-500"
+                style={{
+                  left: `${Math.min(92, Math.max(8, (totalDoneKm / plan.goalKm) * 100))}%`,
+                  transform: 'translateX(-50%)',
+                }}
               >
-                {item.isCompleted && (
-                  <span className="material-symbols-outlined text-white text-lg">check</span>
-                )}
+                <div className="w-10 h-10 bg-white border-2 border-[#14241C] rounded-full hard-shadow rotate-[12deg] flex items-center justify-center -mt-1">
+                  <span className="material-symbols-outlined text-[#006a3a] text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    directions_run
+                  </span>
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* Bottom Action Buttons */}
-      <div className="flex flex-col gap-3 pt-2">
-        <button
-          onClick={() => triggerToast('📅 บันทึกแผนการซ้อมลง Google Calendar เรียบร้อยแล้ว!')}
-          className="w-full bg-[#006a3a] text-white border-2 border-[#14241C] hard-shadow py-3.5 rounded-full font-headline-md text-lg flex items-center justify-center gap-2 hover:bg-[#00864b] active:translate-y-[2px] transition-all"
-        >
-          <span className="material-symbols-outlined">event_available</span>
-          <span>เพิ่มลงปฏิทิน</span>
-        </button>
+          {/* Training Schedule Cards */}
+          <div className="flex flex-col gap-3">
+            {plan.schedule.map((item: PlanDay, index: number) => {
+              const isEven = index % 2 === 0;
+              const rotation = isEven ? 'rotate-[-1deg]' : 'rotate-[1.5deg]';
+              const isCompleted = completedDates.has(item.date);
+              const zone = state.zones.find((z) => z.id === item.suggestedZoneId);
 
-        <button
-          onClick={() => setShowEditModal(true)}
-          className="w-full bg-white text-[#14241C] border-2 border-[#14241C] hard-shadow py-3.5 rounded-full font-headline-md text-lg flex items-center justify-center gap-2 hover:bg-[#FFD84D]/30 active:translate-y-[2px] transition-all"
-        >
-          <span className="material-symbols-outlined">refresh</span>
-          <span>สร้างใหม่ (AI Plan Generator)</span>
-        </button>
-      </div>
+              return (
+                <div
+                  key={item.date}
+                  onClick={() => toggleDayComplete(item.date)}
+                  className={`bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-center gap-4 ${rotation} hover:rotate-0 transition-transform cursor-pointer ${
+                    isCompleted ? 'opacity-80' : ''
+                  }`}
+                >
+                  <div className="flex flex-col items-center min-w-[50px]">
+                    <span className="font-label-md text-xs text-[#3d4a40] font-bold">{dayLabel(item.date)}</span>
+                    <span className="font-headline-md text-2xl font-bold">{dateNum(item.date)}</span>
+                  </div>
+
+                  <div className="h-10 w-[2px] bg-[#bccabd]" />
+
+                  <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`${TYPE_COLOR[item.type]} px-2.5 py-0.5 border-2 border-[#14241C] rounded-full font-label-md text-[10px] font-bold uppercase`}>
+                        {TYPE_LABEL[item.type]}
+                      </span>
+                      <span className="font-headline-md text-base font-bold">
+                        {item.targetKm} km
+                      </span>
+                    </div>
+
+                    <p className="font-body-md text-xs text-[#3d4a40] truncate">
+                      {zone ? `${zone.name} — ${item.note}` : item.note}
+                    </p>
+
+                    {item.timeSlot && (
+                      <span className="font-label-md text-[10px] text-[#3d4a40]/80">
+                        ⏰ {item.timeSlot}
+                      </span>
+                    )}
+                  </div>
+
+                  <div
+                    className={`w-8 h-8 rounded-full border-2 border-[#14241C] flex items-center justify-center transition-all ${
+                      isCompleted ? 'bg-[#006a3a]' : 'bg-white'
+                    }`}
+                  >
+                    {isCompleted && (
+                      <span className="material-symbols-outlined text-white text-lg">check</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom Action Buttons */}
+          <div className="flex flex-col gap-3 pt-2">
+            <button
+              onClick={() =>
+                dispatch({
+                  type: 'TOAST',
+                  text: '📅 ยังไม่รองรับการเพิ่มลงปฏิทิน (.ics export รอ implement)',
+                  tone: 'info',
+                })
+              }
+              className="w-full bg-[#006a3a] text-white border-2 border-[#14241C] hard-shadow py-3.5 rounded-full font-headline-md text-lg flex items-center justify-center gap-2 hover:bg-[#00864b] active:translate-y-[2px] transition-all"
+            >
+              <span className="material-symbols-outlined">event_available</span>
+              <span>เพิ่มลงปฏิทิน</span>
+            </button>
+
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="w-full bg-white text-[#14241C] border-2 border-[#14241C] hard-shadow py-3.5 rounded-full font-headline-md text-lg flex items-center justify-center gap-2 hover:bg-[#FFD84D]/30 active:translate-y-[2px] transition-all"
+            >
+              <span className="material-symbols-outlined">refresh</span>
+              <span>สร้างใหม่ (AI Plan Generator)</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Goal Edit & Regenerate Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="absolute inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white border-3 border-[#14241C] hard-shadow-lg rounded-2xl p-6 w-full max-w-sm relative">
             <button
               onClick={() => setShowEditModal(false)}

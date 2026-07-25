@@ -22,7 +22,7 @@ export const Navbar: React.FC = () => {
   const activeTab = navTabFor(state.ui.screen);
 
   return (
-    <nav className="fixed bottom-0 w-full z-50 bg-white border-t-2 border-[#14241C] pb-safe">
+    <nav className="absolute bottom-0 inset-x-0 z-50 bg-white border-t-2 border-[#14241C] pb-safe">
       <div className="flex justify-around items-center h-20 px-2 max-w-lg mx-auto">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;

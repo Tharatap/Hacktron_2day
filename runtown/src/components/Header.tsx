@@ -20,7 +20,7 @@ export const Header: React.FC = () => {
   const { user } = state;
 
   return (
-    <header className="fixed top-0 w-full z-50 bg-[#ebfef1]/80 backdrop-blur-xl pt-safe border-b border-[#14241C]/10">
+    <header className="absolute top-0 inset-x-0 z-50 bg-[#ebfef1]/80 backdrop-blur-xl pt-safe border-b border-[#14241C]/10">
       <div className="h-16 px-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-headline-md text-2xl text-[#14241C] uppercase tracking-wide">
