@@ -1,75 +1,363 @@
-export type NavTab = 'map' | 'run' | 'shop' | 'plan' | 'profile';
+/**
+ * RunTown — Type contract กลางของทั้งแอป
+ *
+ * ทุกหน้า UI ต้อง import type จากไฟล์นี้เท่านั้น ห้ามประกาศ shape ซ้ำในหน้าใดหน้าหนึ่ง
+ * ถ้าจะเพิ่ม field ให้เพิ่มที่นี่ที่เดียว
+ */
 
-export interface LocationSpot {
-  id: string;
-  name: string;
-  subLocation: string;
-  runnersCount: number;
-  rating: number;
-  loopKm: number;
-  tags: string[];
-  image: string;
-  topNote?: string;
-  position: {
-    top: string;
-    left: string;
-    rotation: string;
-  };
-  cardImage?: string;
+/* ------------------------------------------------------------------ */
+/* Geo                                                                 */
+/* ------------------------------------------------------------------ */
+
+export interface LatLng {
+  lat: number;
+  lng: number;
 }
 
-export interface LeaderboardUser {
-  rank: number;
+/* ------------------------------------------------------------------ */
+/* Ranking — จุดขายหลัก: แบ่ง ranking ตาม "phase (pace)" + "ระยะทาง"    */
+/* ทำให้มือใหม่ไม่ต้องไปแข่งกับนักวิ่งอาชีพ = inclusive                  */
+/* ------------------------------------------------------------------ */
+
+/** phase การวิ่ง แบ่งตาม pace (วินาที/กม.) */
+export type PaceTier = 'walker' | 'jogger' | 'runner' | 'racer';
+
+/** ระดับระยะทางที่ลงแข่ง */
+export type DistanceTier = 'D3' | 'D5' | 'D10' | 'D21';
+
+export interface TierInfo {
+  id: PaceTier;
+  label: string;
+  labelTh: string;
+  /** ช่วง pace เป็นวินาที/กม. [min, max] */
+  paceRange: [number, number];
+  color: string;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
   name: string;
-  distanceKm: number;
   avatar: string;
-  isUser?: boolean;
-  pace?: string;
-  activityType?: string;
-  rankBadge?: string;
-}
-
-export interface ShopReward {
-  id: string;
-  title: string;
-  location?: string;
-  description: string;
-  coinsCost: number;
-  image: string;
-  annotation?: string;
-  category: 'ทั้งหมด' | 'อุปกรณ์' | 'อาหาร' | 'สุขภาพ' | 'งานวิ่ง';
-  distanceToUnlockKm?: number;
-}
-
-export interface TrainingDay {
-  id: string;
-  day: string;
-  dateNum: string;
-  type: 'EASY' | 'REST' | 'TEMPO' | 'LONG';
-  typeColorBg: string;
   distanceKm: number;
-  locationNotes: string;
-  timeRange?: string;
-  isCompleted: boolean;
+  /** pace เฉลี่ย หน่วยวินาที/กม. */
+  paceSec: number;
+  paceTier: PaceTier;
+  distanceTier: DistanceTier;
+  runsThisWeek: number;
+  isMe?: boolean;
 }
 
-export interface UserProfileData {
+/* ------------------------------------------------------------------ */
+/* Zone — พื้นที่วิ่งที่แนะนำ (scope: ชลบุรี)                            */
+/* ------------------------------------------------------------------ */
+
+export type Surface = 'road' | 'trail' | 'track' | 'beach' | 'mixed';
+
+export interface Zone {
+  id: string;
   name: string;
-  levelTitle: string;
-  coins: number;
-  totalKm: number;
-  totalRuns: number;
-  streakDays: number;
-  hatColor: 'green' | 'pink' | 'yellow' | 'blue';
-  avatarUrl: string;
+  nameEn: string;
+  district: string;
+  center: LatLng;
+  /** รัศมีของโซนเป็นเมตร ใช้วาดวงบนแผนที่ */
+  radiusM: number;
+  surface: Surface;
+  /** 1 = ง่ายมาก, 5 = โหด */
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  loopDistanceKm: number;
+  /** คนที่กำลังวิ่งอยู่ตอนนี้ — ตัวเลขนี้คือหัวใจของ "ความมีชีวิต" ของแผนที่ */
+  liveRunners: number;
+  weeklyRunners: number;
+  rating: number;
+  reviewCount: number;
+  tags: string[];
+  description: string;
+  bestTime: string;
+  hasLighting: boolean;
+  hasWater: boolean;
+  hasToilet: boolean;
+  routeIds: string[];
 }
 
-export interface PastRunHistory {
+/* ------------------------------------------------------------------ */
+/* Route + Checkpoint                                                  */
+/* ------------------------------------------------------------------ */
+
+export type CheckpointKind = 'start' | 'tower' | 'finish';
+
+export interface Checkpoint {
   id: string;
-  date: string;
-  location: string;
-  distanceKm: number;
-  timeFormatted: string;
-  pace: string;
-  coinsEarned: number;
+  name: string;
+  kind: CheckpointKind;
+  position: LatLng;
+  /** ปลดล็อกเมื่อวิ่งครบกี่ กม. — ใช้แทน GPS geofence ในเดโม */
+  atKm: number;
+  coinReward: number;
 }
+
+export interface RunRoute {
+  id: string;
+  zoneId: string;
+  name: string;
+  distanceKm: number;
+  elevationM: number;
+  /** polyline สำหรับวาดบนแผนที่ */
+  path: LatLng[];
+  checkpoints: Checkpoint[];
+  createdBy: string;
+  /** true = ผู้ใช้คนอื่นสร้างแล้วแชร์ (feature 9 — โชว์ได้แม้ยังสร้างเองไม่ได้) */
+  isCommunity: boolean;
+  timesRun: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Community                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface Review {
+  id: string;
+  zoneId: string;
+  userId: string;
+  name: string;
+  avatar: string;
+  rating: number;
+  text: string;
+  createdAt: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  zoneId: string;
+  userId: string;
+  name: string;
+  avatar: string;
+  text: string;
+  createdAt: number;
+  isMe?: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* Merchant + Reward — ฝั่งรายได้                                       */
+/* ------------------------------------------------------------------ */
+
+export type MerchantCategory = 'gear' | 'food' | 'health' | 'event';
+
+export interface Merchant {
+  id: string;
+  name: string;
+  category: MerchantCategory;
+  district: string;
+  location: LatLng;
+  /** commission ที่แอปเก็บต่อคูปองที่ถูกแลกจริง — ใส่ไว้เพื่อโชว์ในสไลด์ธุรกิจ */
+  commissionRate: number;
+  blurb: string;
+}
+
+export interface Reward {
+  id: string;
+  merchantId: string;
+  title: string;
+  /** มูลค่าส่วนลดจริงเป็นบาท ใช้คำนวณ commission ให้กรรมการเห็น */
+  valueBaht: number;
+  coinCost: number;
+  stock: number;
+  expiresInDays: number;
+}
+
+export interface RedeemedReward {
+  id: string;
+  rewardId: string;
+  code: string;
+  redeemedAt: number;
+  used: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* User                                                                */
+/* ------------------------------------------------------------------ */
+
+export interface User {
+  id: string;
+  name: string;
+  avatar: string;
+  /** ใช้คำนวณแคลอรี่ */
+  weightKg: number;
+  /** ใช้ประมาณ stride length จากจำนวนก้าว */
+  heightCm: number;
+  homeZoneId: string;
+  coins: number;
+  totalDistanceKm: number;
+  weeklyDistanceKm: number;
+  streakDays: number;
+  paceTier: PaceTier;
+  distanceTier: DistanceTier;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sensor — feature 6 (จับการแกว่งมือถือ)                               */
+/* ------------------------------------------------------------------ */
+
+export type SensorPermission = 'unknown' | 'granted' | 'denied' | 'unsupported';
+
+/** sensor = ใช้ accelerometer จริง, simulate = ปุ่มสำรองตอนเดโมพัง */
+export type TrackingMode = 'sensor' | 'simulate';
+
+export interface SensorState {
+  permission: SensorPermission;
+  mode: TrackingMode;
+  /** ความแรงล่าสุด ใช้วาด waveform ให้เห็นว่า sensor ทำงาน */
+  magnitude: number;
+  /** ก้าว/นาที */
+  cadence: number;
+  stepCount: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Run session                                                         */
+/* ------------------------------------------------------------------ */
+
+export type RunStatus = 'idle' | 'countdown' | 'running' | 'paused' | 'finished';
+
+export interface RunSession {
+  status: RunStatus;
+  routeId: string | null;
+  startedAt: number | null;
+  elapsedSec: number;
+  steps: number;
+  /** สะสมทีละช่วง เพราะ stride ผันตาม cadence — ไม่ใช่ steps × ค่าคงที่ */
+  distanceM: number;
+  /** pace ปัจจุบัน วินาที/กม. (0 = ยังคำนวณไม่ได้) */
+  currentPaceSec: number;
+  caloriesKcal: number;
+  collectedCheckpointIds: string[];
+  /** เส้นทางที่วิ่งไปแล้ว ใช้วาดเส้นตามหลัง marker */
+  traveledPath: LatLng[];
+  mode: TrackingMode;
+}
+
+export interface RunRecord {
+  id: string;
+  routeId: string;
+  zoneId: string;
+  finishedAt: number;
+  distanceKm: number;
+  durationSec: number;
+  paceSec: number;
+  caloriesKcal: number;
+  coinsEarned: number;
+  checkpointsCollected: number;
+  mode: TrackingMode;
+}
+
+/* ------------------------------------------------------------------ */
+/* AI Planner (Gemini)                                                 */
+/* ------------------------------------------------------------------ */
+
+export type PlanDayType = 'easy' | 'tempo' | 'long' | 'rest';
+
+export interface PlanDay {
+  /** ISO date เช่น 2026-07-26 */
+  date: string;
+  targetKm: number;
+  type: PlanDayType;
+  /** ช่วงเวลาที่แนะนำ เช่น "06:00–07:00" */
+  timeSlot: string;
+  note: string;
+  suggestedZoneId: string | null;
+}
+
+export interface TrainingPlan {
+  goalKm: number;
+  days: number;
+  /** ข้อจำกัดที่ผู้ใช้พิมพ์เข้าไป เช่น "อังคารเรียนถึง 5 โมงเย็น" */
+  constraints: string;
+  generatedAt: number;
+  schedule: PlanDay[];
+  summary: string;
+}
+
+export interface PlannerState {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  error: string | null;
+  plan: TrainingPlan | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* UI / navigation                                                     */
+/* ------------------------------------------------------------------ */
+
+export type Screen = 'map' | 'zone' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
+
+export interface Toast {
+  id: string;
+  text: string;
+  tone: 'info' | 'success' | 'warn';
+}
+
+export interface UIState {
+  screen: Screen;
+  selectedZoneId: string | null;
+  selectedRouteId: string | null;
+  toasts: Toast[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Root state                                                          */
+/* ------------------------------------------------------------------ */
+
+export interface AppState {
+  user: User;
+  zones: Zone[];
+  routes: RunRoute[];
+  merchants: Merchant[];
+  rewards: Reward[];
+  redeemed: RedeemedReward[];
+  reviews: Record<string, Review[]>;
+  chat: Record<string, ChatMessage[]>;
+  leaderboards: Record<string, LeaderboardEntry[]>;
+  run: RunSession;
+  sensor: SensorState;
+  planner: PlannerState;
+  history: RunRecord[];
+  ui: UIState;
+  /** ผลลัพธ์ของรอบวิ่งล่าสุด ใช้ส่งข้ามหน้า Run -> Finish */
+  lastResult: RunRecord | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Actions                                                             */
+/* ------------------------------------------------------------------ */
+
+export type Action =
+  // navigation
+  | { type: 'NAV'; screen: Screen }
+  | { type: 'SELECT_ZONE'; zoneId: string }
+  | { type: 'SELECT_ROUTE'; routeId: string }
+  // sensor
+  | { type: 'SENSOR_PERMISSION'; permission: SensorPermission }
+  | { type: 'SENSOR_MODE'; mode: TrackingMode }
+  | { type: 'SENSOR_SAMPLE'; magnitude: number }
+  // run lifecycle
+  /** routeId เป็น null = วิ่งอิสระ ไม่ผูกกับ route/zone ใดๆ */
+  | { type: 'RUN_ARM'; routeId: string | null }
+  | { type: 'RUN_START' }
+  | { type: 'RUN_PAUSE' }
+  | { type: 'RUN_RESUME' }
+  /** เรียกทุก 1 วินาทีจาก useRunEngine — newSteps คือก้าวที่ตรวจได้ในวินาทีนั้น */
+  | { type: 'RUN_TICK'; newSteps: number; cadence: number }
+  | { type: 'RUN_FINISH' }
+  | { type: 'RUN_RESET' }
+  /** ใช้แค่วาด minimap ตอนวิ่งอิสระ ไม่เกี่ยวกับการคำนวณระยะ/pace/kcal ซึ่งยังมาจากก้าวเหมือนเดิม */
+  | { type: 'RUN_GPS_UPDATE'; position: LatLng }
+  // shop
+  | { type: 'REDEEM'; rewardId: string }
+  // planner
+  | { type: 'PLAN_LOADING' }
+  | { type: 'PLAN_READY'; plan: TrainingPlan }
+  | { type: 'PLAN_ERROR'; error: string }
+  // community
+  | { type: 'POST_REVIEW'; zoneId: string; rating: number; text: string }
+  | { type: 'POST_CHAT'; zoneId: string; text: string }
+  // toast
+  | { type: 'TOAST'; text: string; tone?: Toast['tone'] }
+  | { type: 'TOAST_DISMISS'; id: string };

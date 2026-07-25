@@ -1,280 +1,422 @@
-import { LocationSpot, LeaderboardUser, ShopReward, TrainingDay, PastRunHistory } from '../types';
+/**
+ * Mock data ทั้งหมด — scope: ชลบุรี
+ *
+ * ⚠️ พิกัดเป็นค่าประมาณจากความจำ ต้องเปิดแผนที่เช็คตาก่อนเดโม
+ * ถ้าหมุดไปลงกลางทะเลกรรมการจับได้ทันที ใช้เวลา 10 นาทีเลื่อนหมุดคุ้มมาก
+ *
+ * ชื่อร้านค้าเป็นชื่อสมมติทั้งหมด ไม่ใช่ธุรกิจจริง
+ */
 
-export const PIG_MASCOT_AVATAR = "https://lh3.googleusercontent.com/aida/AP1WRLt2ml1Lj0uKRvEOcazCm6wcN-LuGCsPFJ_qeZN8MTVtGhOipQoWZmDtcpouHOI482K_Fo9CPVTIaKBVpx9fpzqSTjd3xv_uwfEkawganxlxgApJ_koXwAXmls80RzfmmUO2hOxp_xL6TEUrl-Wnmr84Iy27qXSTpTcPeQYBGWFVNymC_WmqI21VVwS58JAG5XrnWEkuRF4l65neFdj48Ovphyyy1uyj_jH8Bu1kCq9GczzqVSLiKpdRpG-r22TzHohUe0aY-duV-A";
+import type {
+  Zone,
+  RunRoute,
+  Merchant,
+  Reward,
+  Review,
+  ChatMessage,
+  LeaderboardEntry,
+  User,
+  LatLng,
+  Checkpoint,
+} from '../types';
+import { metersToLatLngOffset, paceTierFromPace, distanceTierFromKm } from '../lib/formulas';
 
-export const RUNTOWN_LOGO = "https://lh3.googleusercontent.com/aida-public/AB6AXuCRfpyyB8zJmtGuKPtHVXiPgEYhQVpQahwuefrQOeCP50CFh2TTvqEAy4rXYI_3C0KIvOD0OKo2I8pluFuceUiLuvW_SENMeBNGupaTQf5EaUU9Df46QILrOSI-6VJnpshVXRm2PfqlhLuREeSd0lu-egwmFVDq8XgstE6vlfkuP2urZ-BfrnMdznh2Bc15eBxGww8Bguq9U2imo39_WwvdACQEYEOnpQL2P4LDQYL_9JqRxSWN9JEdG7BuOAY31h6chasSKPx9tKE";
+/* ------------------------------------------------------------------ */
+/* Path generator                                                      */
+/* ------------------------------------------------------------------ */
 
-export const LOCATION_SPOTS: LocationSpot[] = [
+/**
+ * สร้าง polyline เป็นวงรอบจุดศูนย์กลาง
+ * ใช้แทน GPX จริงในเดโม — ถ้ามีเวลาเหลือค่อยเอา path จริงมาแทน
+ */
+function makeLoop(center: LatLng, radiusM: number, points = 28, wobble = 0.12): LatLng[] {
+  const path: LatLng[] = [];
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * Math.PI * 2;
+    const r = radiusM * (1 + Math.sin(angle * 3) * wobble);
+    const { dLat, dLng } = metersToLatLngOffset(
+      center.lat,
+      Math.cos(angle) * r,
+      Math.sin(angle) * r
+    );
+    path.push({ lat: center.lat + dLat, lng: center.lng + dLng });
+  }
+  return path;
+}
+
+/** วาง checkpoint กระจายตามระยะ */
+function makeCheckpoints(
+  routeId: string,
+  path: LatLng[],
+  distanceKm: number,
+  towerNames: string[]
+): Checkpoint[] {
+  const cps: Checkpoint[] = [
+    { id: `${routeId}-start`, name: 'จุดเริ่ม', kind: 'start', position: path[0], atKm: 0, coinReward: 0 },
+  ];
+  towerNames.forEach((name, i) => {
+    const frac = (i + 1) / (towerNames.length + 1);
+    const idx = Math.floor(frac * (path.length - 1));
+    cps.push({
+      id: `${routeId}-t${i + 1}`,
+      name,
+      kind: 'tower',
+      position: path[idx],
+      atKm: +(distanceKm * frac).toFixed(2),
+      coinReward: 15,
+    });
+  });
+  cps.push({
+    id: `${routeId}-finish`,
+    name: 'เส้นชัย',
+    kind: 'finish',
+    position: path[path.length - 1],
+    atKm: distanceKm,
+    coinReward: 25,
+  });
+  return cps;
+}
+
+/* ------------------------------------------------------------------ */
+/* Zones                                                               */
+/* ------------------------------------------------------------------ */
+
+export const ZONES: Zone[] = [
   {
-    id: 'bangsaen',
+    id: 'z-bangsaen',
     name: 'หาดบางแสน',
-    subLocation: 'เมืองชลบุรี',
-    runnersCount: 38,
+    nameEn: 'Bangsaen Beach',
+    district: 'เมืองชลบุรี',
+    center: { lat: 13.2843, lng: 100.911 },
+    radiusM: 900,
+    surface: 'road',
+    difficulty: 1,
+    loopDistanceKm: 4.2,
+    liveRunners: 38,
+    weeklyRunners: 1420,
     rating: 4.7,
-    loopKm: 4.2,
+    reviewCount: 216,
     tags: ['ริมทะเล', 'พื้นเรียบ', 'มีไฟกลางคืน'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDD1DvQzRMJBhwqmiaqtugQOqJxRG4qHZrl1kaPI7FKHB62QpDTdWphs5c1QYA0KPiAHmDN7VEfUsPCW-IhrX2ByM4YTJ_KWwvBdszZHVlcKxleyHk95anOnAArPf-GGsrw3kdpDuJYgYRVn1Z0e5K6RTeUxhZoZ-1hRWh4X3FuDlEg-TcGo3-4N9JOuZNXL8FcfbKdCO1Qlt2P6NatJPCXGXQOx_PN6Y6-wJRbWEBgiZOVTyLw4PsI5VPaVpMy43jvIynHUxWUcE0',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCTNNqa38QtnSu5PdO34Z1YyLuXX8fC6hMdBws2_S1iea1nqCdULPo2Eu8wTasM-2xPr8Xldn5VF0nKuG6Zs7O7j52x_JSdAsxjVLF8j0n5M2ui8vPV7GSoFosh7xNgENciKZo4Y_A6Nuxyy9LaUHZfbernAomj9H7SaFeeVH_kUdnNzBnIJTTfg1PajWQItY5A2hV9rLjRwOG3tqF36s8ztbjciZa7CqdoWe9laVRx8wW8B8l2xCJ0tKnPfsa7iYJIxZQnuDw3JzA',
-    topNote: 'คนเยอะสุดตอนนี้',
-    position: {
-      top: '40%',
-      left: '30%',
-      rotation: 'rotate-[-4deg]'
-    }
+    description:
+      'เส้นเลียบหาดยาว พื้นเรียบตลอด ลมทะเลช่วยได้เยอะช่วงเย็น จุดวิ่งที่คนหนาแน่นที่สุดในชลบุรี',
+    bestTime: '05:30–07:00 และ 17:00–19:00',
+    hasLighting: true,
+    hasWater: true,
+    hasToilet: true,
+    routeIds: ['r-bangsaen-4k', 'r-bangsaen-2k'],
   },
   {
-    id: 'ku-sriracha',
-    name: 'สนามลู่วิ่ง ม.เกษตร ศรีราชา',
-    subLocation: 'ศรีราชา ชลบุรี',
-    runnersCount: 22,
-    rating: 4.8,
-    loopKm: 0.4,
-    tags: ['ลู่ยาง', 'ไฟสว่าง', 'ที่จอดรถสะดวก'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDN29bbI3A9j5IYRN0RoQuUJKXNqjbLyQOsVfYI-bOjgFu1eA631WLb1HxPeGryn0lrCTtBhXsvQweqIjtP7ZXpj6ag-b3WuGXRhwezkmMgfrn_AA-UNXP-QJLKQYivQY-g5q5aNDkJulkjgcyAHJsHz8EvQzTf7UsfdOzusYz9sTA45nounsQnU5eHEhb16f9v5jK9iH0-aryutmLLNsfkeuN4K0qD04vcpEFvwWyCdQPDB7DJq5ogldrkPUKCO70sTbXd31ROL4I',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDN29bbI3A9j5IYRN0RoQuUJKXNqjbLyQOsVfYI-bOjgFu1eA631WLb1HxPeGryn0lrCTtBhXsvQweqIjtP7ZXpj6ag-b3WuGXRhwezkmMgfrn_AA-UNXP-QJLKQYivQY-g5q5aNDkJulkjgcyAHJsHz8EvQzTf7UsfdOzusYz9sTA45nounsQnU5eHEhb16f9v5jK9iH0-aryutmLLNsfkeuN4K0qD04vcpEFvwWyCdQPDB7DJq5ogldrkPUKCO70sTbXd31ROL4I',
-    position: {
-      top: '20%',
-      left: '70%',
-      rotation: 'rotate-[3deg]'
-    }
-  },
-  {
-    id: 'laem-chabang',
-    name: 'สวนสุขภาพแหลมฉบัง',
-    subLocation: 'แหลมฉบัง',
-    runnersCount: 17,
-    rating: 4.5,
-    loopKm: 2.1,
-    tags: ['สวนสาธารณะ', 'มีลมทะเล', 'ลานแอโรบิก'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDRQ2DQFrXR8QgJpSNTh6dJuwqejJJIm3rn1DM1ikxSOteMPAIaECgYFbqV3H27dqbEFXjpLdmKsyG35ex4-VzJW9JNApXtdLzZ1loxYK_NUC7qAVKEVwU6R4ThLdqIo89f-uL3E5PdL6VG8zXa7KTMj5BzsCojLKY5NxBOFmRyeKscSYrBvNbce0K4opf62IqjGqK-DQ_8tAekiuyN5ETTd1FxdXJss-o4jVljNElCCxmaxw85-J6ancyJ33drSYFRSmq4x1khhLo',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDRQ2DQFrXR8QgJpSNTh6dJuwqejJJIm3rn1DM1ikxSOteMPAIaECgYFbqV3H27dqbEFXjpLdmKsyG35ex4-VzJW9JNApXtdLzZ1loxYK_NUC7qAVKEVwU6R4ThLdqIo89f-uL3E5PdL6VG8zXa7KTMj5BzsCojLKY5NxBOFmRyeKscSYrBvNbce0K4opf62IqjGqK-DQ_8tAekiuyN5ETTd1FxdXJss-o4jVljNElCCxmaxw85-J6ancyJ33drSYFRSmq4x1khhLo',
-    position: {
-      top: '60%',
-      left: '75%',
-      rotation: 'rotate-[-2deg]'
-    }
-  },
-  {
-    id: 'bang-phra',
-    name: 'อ่างเก็บน้ำบางพระ',
-    subLocation: 'ศรีราชา',
-    runnersCount: 14,
-    rating: 4.9,
-    loopKm: 8.5,
-    tags: ['เทรล', 'วิวภูเขา', 'อากาศดีมาก'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB62ZrizFgrV7EnXHlx_yrrAi011s15c_wTb6ODK5bX6gnrMxaiDR5BkcL03BT7QbjkwmyyUcBEL8-Zf7Ay3XqwBfT8zFtg0NZelRjueeLPLSgDRzqc-WcLGJvU5gUIh9213J2OI8mlhcVcTZ7DgRZLlhYFGy88hatxmZt0O8LSsbMU2OAicMlayK2o4CAYyl3j_z1GuehBHkPfgTm0pgo66DZJbWY3HHrgFG93P0HxwA90zplZEAGlJUgKGAGEKUPaMHrC5C8dzDw',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB62ZrizFgrV7EnXHlx_yrrAi011s15c_wTb6ODK5bX6gnrMxaiDR5BkcL03BT7QbjkwmyyUcBEL8-Zf7Ay3XqwBfT8zFtg0NZelRjueeLPLSgDRzqc-WcLGJvU5gUIh9213J2OI8mlhcVcTZ7DgRZLlhYFGy88hatxmZt0O8LSsbMU2OAicMlayK2o4CAYyl3j_z1GuehBHkPfgTm0pgo66DZJbWY3HHrgFG93P0HxwA90zplZEAGlJUgKGAGEKUPaMHrC5C8dzDw',
-    position: {
-      top: '12%',
-      left: '20%',
-      rotation: 'rotate-[5deg]'
-    }
-  },
-  {
-    id: 'koh-loy',
-    name: 'เกาะลอย ศรีราชา',
-    subLocation: 'ศรีราชา',
-    runnersCount: 11,
-    rating: 4.6,
-    loopKm: 1.8,
-    tags: ['ริมทะเล', 'สะพานข้ามทะเล', 'รับลมเย็น'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBLwXgBu3NEIZRgrfx_psRrk07ud90K3Gclu8_u1-3BtDgs57JvfGaRlr6t0xk3cvSpcPh-MeNeWAej66Vkz7XbhgmGeHBkRrM1NP2jAQZGGNSSkMJhVmVc53LimX7cOaBTm8MqDwuVA-dcAOYby7lCqTrFC4j07RT5Y0xOocMiPIJsUqoM3dOlu0UlZFEdBpqYk86higdLVkdjFdy99o7K6QQow8iCnalFoIOcnKC_WXXBp5kzpOxvP55-AQj1tOC0dPNRsPV0iKc',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBLwXgBu3NEIZRgrfx_psRrk07ud90K3Gclu8_u1-3BtDgs57JvfGaRlr6t0xk3cvSpcPh-MeNeWAej66Vkz7XbhgmGeHBkRrM1NP2jAQZGGNSSkMJhVmVc53LimX7cOaBTm8MqDwuVA-dcAOYby7lCqTrFC4j07RT5Y0xOocMiPIJsUqoM3dOlu0UlZFEdBpqYk86higdLVkdjFdy99o7K6QQow8iCnalFoIOcnKC_WXXBp5kzpOxvP55-AQj1tOC0dPNRsPV0iKc',
-    position: {
-      top: '72%',
-      left: '18%',
-      rotation: 'rotate-[2deg]'
-    }
-  },
-  {
-    id: 'khao-sam-muk',
-    name: 'เขาสามมุข',
-    subLocation: 'บางแสน',
-    runnersCount: 9,
+    id: 'z-samuk',
+    name: 'เขาสามมุก',
+    nameEn: 'Khao Sam Muk',
+    district: 'เมืองชลบุรี',
+    center: { lat: 13.2717, lng: 100.9047 },
+    radiusM: 500,
+    surface: 'road',
+    difficulty: 4,
+    loopDistanceKm: 2.6,
+    liveRunners: 9,
+    weeklyRunners: 310,
     rating: 4.4,
-    loopKm: 3.5,
-    tags: ['เนินชัน', 'เทรลชัน', 'วิวพาโนรามา'],
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBgb_zG6E6RCutz39JzX8k5ngOF9gqkPuH_iksvaFRCXTh6hSLwXS3pvDQnwEgah5u5MapNfEfrKjKxfuQXQxYx-OstdF84f4IXiM60-RzQN7jJKq_s38uGGtKftcc5tDT0EK7mmUXXyLklNSK-VKVQXHpn2v5FkLQBENxAF-OEoywRMK8HzOOY1IGut4aYRFnPcFlGjNbe9r6TmOsrgc5gcU6yzVB8fVWzR_4g3caoDuDrn3MRAPFUgYJf1wVAYQq-VPjWVqXGr_M',
-    cardImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBgb_zG6E6RCutz39JzX8k5ngOF9gqkPuH_iksvaFRCXTh6hSLwXS3pvDQnwEgah5u5MapNfEfrKjKxfuQXQxYx-OstdF84f4IXiM60-RzQN7jJKq_s38uGGtKftcc5tDT0EK7mmUXXyLklNSK-VKVQXHpn2v5FkLQBENxAF-OEoywRMK8HzOOY1IGut4aYRFnPcFlGjNbe9r6TmOsrgc5gcU6yzVB8fVWzR_4g3caoDuDrn3MRAPFUgYJf1wVAYQq-VPjWVqXGr_M',
-    position: {
-      top: '45%',
-      left: '52%',
-      rotation: 'rotate-[-6deg]'
-    }
-  }
+    reviewCount: 88,
+    tags: ['ทางชัน', 'วิวสวย', 'มีลิง'],
+    description: 'ทางขึ้นเขาชันจริง เหมาะกับซ้อม hill repeat ระวังลิงแย่งของ',
+    bestTime: '06:00–08:00',
+    hasLighting: false,
+    hasWater: false,
+    hasToilet: true,
+    routeIds: ['r-samuk-hill'],
+  },
+  {
+    id: 'z-bangphra',
+    name: 'อ่างเก็บน้ำบางพระ',
+    nameEn: 'Bang Phra Reservoir',
+    district: 'ศรีราชา',
+    center: { lat: 13.2167, lng: 101.0167 },
+    radiusM: 1600,
+    surface: 'mixed',
+    difficulty: 3,
+    loopDistanceKm: 10.5,
+    liveRunners: 14,
+    weeklyRunners: 520,
+    rating: 4.8,
+    reviewCount: 134,
+    tags: ['ระยะยาว', 'ธรรมชาติ', 'รถน้อย'],
+    description: 'เส้นรอบอ่างยาวพอสำหรับซ้อม long run รถน้อย อากาศดี แต่ไม่มีไฟตอนกลางคืน',
+    bestTime: '05:30–08:00',
+    hasLighting: false,
+    hasWater: true,
+    hasToilet: true,
+    routeIds: ['r-bangphra-10k'],
+  },
+  {
+    id: 'z-ku-sriracha',
+    name: 'ม.เกษตรศาสตร์ ศรีราชา',
+    nameEn: 'KU Sriracha Campus',
+    district: 'ศรีราชา',
+    center: { lat: 13.114, lng: 100.927 },
+    radiusM: 600,
+    surface: 'track',
+    difficulty: 2,
+    loopDistanceKm: 3.1,
+    liveRunners: 22,
+    weeklyRunners: 680,
+    rating: 4.5,
+    reviewCount: 97,
+    tags: ['ในมหาวิทยาลัย', 'ปลอดภัย', 'มีลู่ยาง'],
+    description: 'สนามในมหาลัย ปลอดภัย มีลู่ยางให้ซ้อม interval กลุ่มนักศึกษาเยอะช่วงเย็น',
+    bestTime: '17:00–20:00',
+    hasLighting: true,
+    hasWater: true,
+    hasToilet: true,
+    routeIds: ['r-ku-3k'],
+  },
+  {
+    id: 'z-kohloy',
+    name: 'เกาะลอยศรีราชา',
+    nameEn: 'Koh Loy Sriracha',
+    district: 'ศรีราชา',
+    center: { lat: 13.1727, lng: 100.9203 },
+    radiusM: 450,
+    surface: 'road',
+    difficulty: 1,
+    loopDistanceKm: 2.4,
+    liveRunners: 11,
+    weeklyRunners: 390,
+    rating: 4.3,
+    reviewCount: 64,
+    tags: ['ริมทะเล', 'ระยะสั้น', 'มีร้านอาหาร'],
+    description: 'วนรอบเกาะลอยได้ วิวทะเล เหมาะกับวิ่งเบาๆ หลังเลิกงาน',
+    bestTime: '17:30–19:30',
+    hasLighting: true,
+    hasWater: true,
+    hasToilet: true,
+    routeIds: ['r-kohloy-2k'],
+  },
+  {
+    id: 'z-laemchabang',
+    name: 'สวนสาธารณะแหลมฉบัง',
+    nameEn: 'Laem Chabang Park',
+    district: 'ศรีราชา',
+    center: { lat: 13.0827, lng: 100.8836 },
+    radiusM: 550,
+    surface: 'road',
+    difficulty: 2,
+    loopDistanceKm: 3.6,
+    liveRunners: 17,
+    weeklyRunners: 470,
+    rating: 4.2,
+    reviewCount: 71,
+    tags: ['ในเมือง', 'มีไฟกลางคืน', 'ที่จอดรถสะดวก'],
+    description: 'สวนกลางชุมชน วิ่งได้ถึงค่ำ มีเครื่องออกกำลังกายกลางแจ้งด้วย',
+    bestTime: '18:00–20:30',
+    hasLighting: true,
+    hasWater: true,
+    hasToilet: true,
+    routeIds: ['r-laemchabang-3k'],
+  },
 ];
 
-export const LEADERBOARD_USERS: LeaderboardUser[] = [
-  {
-    rank: 1,
-    name: 'ฟ้าใส_RunHard',
-    distanceKm: 32.4,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    rankBadge: '👑'
-  },
-  {
-    rank: 2,
-    name: 'กอล์ฟ_PaceMaker',
-    distanceKm: 28.1,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    rankBadge: '🥈'
-  },
-  {
-    rank: 3,
-    name: 'น้ำหวาน_Runner',
-    distanceKm: 26.5,
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
-    rankBadge: '🥉'
-  },
-  {
-    rank: 4,
-    name: 'น้องหมูวิ่งฉิว (คุณ)',
-    distanceKm: 24.6,
-    avatar: PIG_MASCOT_AVATAR,
-    isUser: true
-  },
-  {
-    rank: 5,
-    name: 'RunWithMe',
-    distanceKm: 21.0,
-    avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200',
-    activityType: 'จ๊อกกิ้ง',
-    pace: "8'10\"/km"
-  },
-  {
-    rank: 6,
-    name: 'Tuk_Tuk',
-    distanceKm: 19.5,
-    avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=200',
-    activityType: 'จ๊อกกิ้ง',
-    pace: "8'28\"/km"
-  }
+/* ------------------------------------------------------------------ */
+/* Routes                                                              */
+/* ------------------------------------------------------------------ */
+
+function buildRoute(
+  id: string,
+  zoneId: string,
+  name: string,
+  distanceKm: number,
+  elevationM: number,
+  radiusM: number,
+  towerNames: string[],
+  createdBy: string,
+  isCommunity: boolean,
+  timesRun: number
+): RunRoute {
+  const zone = ZONES.find((z) => z.id === zoneId)!;
+  const path = makeLoop(zone.center, radiusM);
+  return {
+    id,
+    zoneId,
+    name,
+    distanceKm,
+    elevationM,
+    path,
+    checkpoints: makeCheckpoints(id, path, distanceKm, towerNames),
+    createdBy,
+    isCommunity,
+    timesRun,
+  };
+}
+
+export const ROUTES: RunRoute[] = [
+  buildRoute('r-bangsaen-4k', 'z-bangsaen', 'เลียบหาดบางแสน 4.2K', 4.2, 8, 620,
+    ['ศาลาริมหาด', 'ลานปูดำ', 'แยกวงเวียน'], 'RunTown', false, 8420),
+  buildRoute('r-bangsaen-2k', 'z-bangsaen', 'บางแสนสั้น 2K', 2.0, 4, 300,
+    ['ศาลาริมหาด'], 'ploy_runs', true, 1240),
+  buildRoute('r-samuk-hill', 'z-samuk', 'เขาสามมุก Hill 2.6K', 2.6, 96, 380,
+    ['โค้งแรก', 'จุดชมวิว'], 'RunTown', false, 2110),
+  buildRoute('r-bangphra-10k', 'z-bangphra', 'รอบอ่างบางพระ 10.5K', 10.5, 62, 1500,
+    ['สันเขื่อน', 'ศาลากลางน้ำ', 'ป่ายาง', 'จุดชมนก'], 'RunTown', false, 3380),
+  buildRoute('r-ku-3k', 'z-ku-sriracha', 'รอบมอ KU 3.1K', 3.1, 12, 440,
+    ['หน้าหอสมุด', 'สนามฟุตบอล'], 'consider_team', true, 960),
+  buildRoute('r-kohloy-2k', 'z-kohloy', 'วนเกาะลอย 2.4K', 2.4, 6, 340,
+    ['สะพานปลา', 'ศาลเจ้า'], 'RunTown', false, 1580),
+  buildRoute('r-laemchabang-3k', 'z-laemchabang', 'สวนแหลมฉบัง 3.6K', 3.6, 10, 420,
+    ['ลานออกกำลังกาย', 'สระน้ำ'], 'nut_lcb', true, 720),
 ];
 
-export const SHOP_REWARDS: ShopReward[] = [
+/* ------------------------------------------------------------------ */
+/* Merchants + Rewards                                                 */
+/* ------------------------------------------------------------------ */
+
+export const MERCHANTS: Merchant[] = [
   {
-    id: 'bangsaen-run-lab',
-    title: 'Bangsaen Run Lab',
-    location: 'Bangsaen',
-    description: '300 THB off running shoes',
-    coinsCost: 600,
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAIZ_x0ZCTim0Fv_PyGeJrKXHJtBTTVU3zmToT1ksg1KR3JWsBduv5uQrQ6Qr4KY45EI3YRIwRG5lm6RhxGy58PDa4RKiO3gn0MztCrGRRTDiPyYb9-GQcLnyWY5F3MqNprgbDc0hlqfcCmB6okPRLAaI-_BmQv5CIvYk9A-jK9Ji_OKYJGE_ND97oSZoynJEJLczQqlRwvSMU85A-eRsgWZC2v0gOAg_7NeFe70cJ2zOoLiQi_S-rMDD-Qys0u_LFaZaEBGt8SXGE',
-    annotation: 'วิ่งอีก 1.6 กม.',
-    category: 'อุปกรณ์',
-    distanceToUnlockKm: 1.6
+    id: 'm-gear-01', name: 'Bangsaen Run Lab', category: 'gear', district: 'บางแสน',
+    location: { lat: 13.2861, lng: 100.9142 }, commissionRate: 0.12,
+    blurb: 'ร้านรองเท้าวิ่งเฉพาะทาง มีบริการวัดรูปเท้าฟรี',
   },
   {
-    id: 'refuel-cafe',
-    title: 'Refuel Cafe',
-    location: 'หาดบางแสน',
-    description: '50% off a post-run protein shake',
-    coinsCost: 150,
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC_0J-xx766HQcUdgrhHX44l-Vy4Sw5Mgwk6Ky3pPtuv2MeCm7wU3M3fee_zsEbxp_7Ph1wkafJ7Ops8cvaTNW3LsvasyEio3LOUdVwfg0tujr1d7J4s13Htic91D9utrzfU3ekOqAR1eJxZiVWpGvC67RyN4Ug-g_aTJpEFH0sv7F1kdniXJAu344k9XZwFjGgxUk01uWKkKVWCgUiwtnHmbgYFL4HrULBDTGg1BCL6BhGp3g44kAtCatNk3nwJNb37Q58Sz4-jqo',
-    category: 'อาหาร'
+    id: 'm-gear-02', name: 'Sriracha Sports House', category: 'gear', district: 'ศรีราชา',
+    location: { lat: 13.1745, lng: 100.9258 }, commissionRate: 0.1,
+    blurb: 'อุปกรณ์กีฬาครบวงจร เสื้อวิ่ง นาฬิกา สายรัดข้อมือ',
   },
   {
-    id: 'sriracha-sports-house',
-    title: 'Sriracha Sports House',
-    location: 'ศรีราชา',
-    description: 'Running socks, buy 1 get 1',
-    coinsCost: 400,
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzJ5VJlFO5Q_Y0jXZsGfH3pxEaz-Ur9RBR0kPOidmmd4TpkfPbIvnL-hcbbJWActVGUQcKzwr9j5yvPy2T5vC6jo6mOxk53KYBKcKhivdQOXdDbVqrAFw6hE1NacIri8TjgOB45_Mb-NOOErp1cwCaj3F5siCHG5_HD1afqvj3KUiak7J_lk-SV_1Vblg9pNNEEnVsqGJKQjPK0yIsrcxX06edZqDFfS-4aUhzwch9ICC792l7Wnt-s55y40mm34z8fuUzYV4rHJE',
-    category: 'อุปกรณ์'
+    id: 'm-food-01', name: 'Refuel Café บางแสน', category: 'food', district: 'บางแสน',
+    location: { lat: 13.2822, lng: 100.9133 }, commissionRate: 0.15,
+    blurb: 'คาเฟ่โปรตีนเชค เปิด 05:30 ทันนักวิ่งเช้า',
   },
   {
-    id: 'chonburi-marathon-2026',
-    title: 'Chonburi Marathon 2026',
-    location: 'เมืองชลบุรี',
-    description: '200 THB off a 10K race entry',
-    coinsCost: 400,
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzZq_DsJQD_ghyWfhuh-qqY4rkMSllT14tEbr1bTN5woAcbbo9ZXEx1R2tlTqjl7BuzJAqw1SuD7uFiEUbAbNUZCQJI3DsrYop8XAOtCEiTeHXLLx_0NjMO3FmN2yMfqKVA00nsniDnGzMOnPeophx0qDF7yDga2ddPLER61OLyF9OvOVKhBuaCN9PU7Ldyc1RkWADgt8wOtp54aJNlhKm86O_Pdu1-YkiCs_RVNhsXLi0z1m4FTRsq5GgLHv1n2hSG8rC204Lik8',
-    category: 'งานวิ่ง'
-  }
+    id: 'm-health-01', name: 'Chonburi Physio Clinic', category: 'health', district: 'เมืองชลบุรี',
+    location: { lat: 13.3612, lng: 100.9847 }, commissionRate: 0.08,
+    blurb: 'กายภาพบำบัดนักกีฬา แก้อาการเจ็บเข่า เอ็นร้อยหวาย',
+  },
+  {
+    id: 'm-event-01', name: 'Chonburi Marathon 2026', category: 'event', district: 'เมืองชลบุรี',
+    location: { lat: 13.3611, lng: 100.9847 }, commissionRate: 0.07,
+    blurb: 'งานวิ่งประจำจังหวัด มิ.ย. 2026 — ระยะ 5K / 10K / Half',
+  },
+  {
+    id: 'm-event-02', name: 'Laem Chabang Night Run', category: 'event', district: 'แหลมฉบัง',
+    location: { lat: 13.0831, lng: 100.8841 }, commissionRate: 0.07,
+    blurb: 'วิ่งกลางคืนริมท่าเรือ ระยะ 5K มือใหม่ลงได้',
+  },
 ];
 
-export const DEFAULT_TRAINING_DAYS: TrainingDay[] = [
-  {
-    id: 'mon-27',
-    day: 'MON',
-    dateNum: '27',
-    type: 'EASY',
-    typeColorBg: 'bg-[#A3E4FF]',
-    distanceKm: 6,
-    locationNotes: 'Bangsaen Beach, flat and lit',
-    timeRange: '18:00 - 19:00',
-    isCompleted: true
-  },
-  {
-    id: 'tue-28',
-    day: 'TUE',
-    dateNum: '28',
-    type: 'REST',
-    typeColorBg: 'bg-emerald-100',
-    distanceKm: 0,
-    locationNotes: 'Class until 5pm, take recovery',
-    isCompleted: false
-  },
-  {
-    id: 'wed-29',
-    day: 'WED',
-    dateNum: '29',
-    type: 'TEMPO',
-    typeColorBg: 'bg-[#FFD84D]',
-    distanceKm: 8,
-    locationNotes: 'KU Sriracha track, intervals',
-    timeRange: '17:30 - 18:30',
-    isCompleted: false
-  },
-  {
-    id: 'thu-30',
-    day: 'THU',
-    dateNum: '30',
-    type: 'EASY',
-    typeColorBg: 'bg-[#A3E4FF]',
-    distanceKm: 5,
-    locationNotes: 'Koh Loy, short loop',
-    timeRange: '18:30 - 19:15',
-    isCompleted: false
-  },
-  {
-    id: 'sat-01',
-    day: 'SAT',
-    dateNum: '01',
-    type: 'LONG',
-    typeColorBg: 'bg-[#80fbac]',
-    distanceKm: 15,
-    locationNotes: 'Bang Phra Reservoir, water!',
-    timeRange: '05:30 - 07:30',
-    isCompleted: false
-  }
+export const REWARDS: Reward[] = [
+  { id: 'rw-01', merchantId: 'm-gear-01', title: 'ส่วนลดรองเท้าวิ่ง 300 บาท', valueBaht: 300, coinCost: 800, stock: 25, expiresInDays: 30 },
+  { id: 'rw-02', merchantId: 'm-gear-01', title: 'วัดรูปเท้า + วิเคราะห์การลงเท้า ฟรี', valueBaht: 500, coinCost: 600, stock: 15, expiresInDays: 45 },
+  { id: 'rw-03', merchantId: 'm-gear-02', title: 'ถุงเท้าวิ่ง ซื้อ 1 แถม 1', valueBaht: 250, coinCost: 400, stock: 40, expiresInDays: 30 },
+  { id: 'rw-04', merchantId: 'm-food-01', title: 'โปรตีนเชคหลังวิ่ง ลด 50%', valueBaht: 90, coinCost: 150, stock: 100, expiresInDays: 14 },
+  { id: 'rw-05', merchantId: 'm-food-01', title: 'กาแฟดำฟรี 1 แก้ว (วิ่งครบ 5 กม.)', valueBaht: 60, coinCost: 100, stock: 200, expiresInDays: 7 },
+  { id: 'rw-06', merchantId: 'm-health-01', title: 'ตรวจประเมินท่าวิ่ง ลด 400 บาท', valueBaht: 400, coinCost: 1000, stock: 10, expiresInDays: 60 },
+  { id: 'rw-07', merchantId: 'm-event-01', title: 'บัตรวิ่ง 10K ลด 200 บาท', valueBaht: 200, coinCost: 700, stock: 50, expiresInDays: 90 },
+  { id: 'rw-08', merchantId: 'm-event-02', title: 'สมัคร Night Run 5K ลด 30%', valueBaht: 150, coinCost: 500, stock: 60, expiresInDays: 60 },
 ];
 
-export const MOCK_RUN_HISTORY: PastRunHistory[] = [
-  {
-    id: 'run-01',
-    date: '25 ก.ค. 2026',
-    location: 'หาดบางแสน จ๊อกกิ้ง 5K',
-    distanceKm: 3.65,
-    timeFormatted: '30:00',
-    pace: "8'14\"",
-    coinsEarned: 78
-  },
-  {
-    id: 'run-02',
-    date: '23 ก.ค. 2026',
-    location: 'อ่างเก็บน้ำบางพระ',
-    distanceKm: 8.20,
-    timeFormatted: '58:12',
-    pace: "7'05\"",
-    coinsEarned: 130
-  },
-  {
-    id: 'run-03',
-    date: '21 ก.ค. 2026',
-    location: 'สนาม ม.เกษตร ศรีราชา',
-    distanceKm: 5.00,
-    timeFormatted: '35:20',
-    pace: "7'04\"",
-    coinsEarned: 85
-  }
+/* ------------------------------------------------------------------ */
+/* User                                                                */
+/* ------------------------------------------------------------------ */
+
+export const DEFAULT_USER: User = {
+  id: 'u-me',
+  name: 'Aom',
+  avatar: '🏃',
+  weightKg: 58,
+  heightCm: 168,
+  homeZoneId: 'z-ku-sriracha',
+  coins: 640,
+  totalDistanceKm: 182.4,
+  weeklyDistanceKm: 18.2,
+  streakDays: 4,
+  paceTier: 'jogger',
+  distanceTier: 'D5',
+};
+
+/* ------------------------------------------------------------------ */
+/* Leaderboards                                                        */
+/* ------------------------------------------------------------------ */
+
+const NAMES = [
+  ['พีท', '🐯'], ['มายด์', '🦊'], ['ต้นน้ำ', '🐬'], ['บีม', '🦅'], ['ฟ้า', '🐧'],
+  ['กร', '🐺'], ['นุ่น', '🦋'], ['เจได', '🐉'], ['ปอนด์', '🐢'], ['แนน', '🦜'],
+  ['อาร์ม', '🦁'], ['จูน', '🐨'], ['เต้', '🦈'], ['ปิ่น', '🐝'], ['วิน', '🐆'],
 ];
+
+function seeded(n: number) {
+  const x = Math.sin(n * 9973) * 10000;
+  return x - Math.floor(x);
+}
+
+function buildLeaderboard(zoneId: string, salt: number): LeaderboardEntry[] {
+  const rows: LeaderboardEntry[] = NAMES.map(([name, avatar], i) => {
+    const r1 = seeded(salt + i * 3);
+    const r2 = seeded(salt + i * 7 + 1);
+    const distanceKm = +(3 + r1 * 42).toFixed(1);
+    const paceSec = Math.round(280 + r2 * 320);
+    return {
+      userId: `u-${zoneId}-${i}`,
+      name,
+      avatar,
+      distanceKm,
+      paceSec,
+      paceTier: paceTierFromPace(paceSec),
+      distanceTier: distanceTierFromKm(distanceKm),
+      runsThisWeek: 1 + Math.floor(r1 * 6),
+      };
+  });
+
+  rows.push({
+    userId: DEFAULT_USER.id,
+    name: DEFAULT_USER.name,
+    avatar: DEFAULT_USER.avatar,
+    distanceKm: DEFAULT_USER.weeklyDistanceKm,
+    paceSec: 468,
+    paceTier: 'jogger',
+    distanceTier: 'D5',
+    runsThisWeek: 4,
+    isMe: true,
+  });
+
+  return rows.sort((a, b) => b.distanceKm - a.distanceKm);
+}
+
+export const LEADERBOARDS: Record<string, LeaderboardEntry[]> = Object.fromEntries(
+  ZONES.map((z, i) => [z.id, buildLeaderboard(z.id, i + 1)])
+);
+
+/* ------------------------------------------------------------------ */
+/* Reviews + Chat                                                      */
+/* ------------------------------------------------------------------ */
+
+const now = Date.now();
+const min = 60_000;
+
+export const REVIEWS: Record<string, Review[]> = {
+  'z-bangsaen': [
+    { id: 'rv1', zoneId: 'z-bangsaen', userId: 'u1', name: 'พีท', avatar: '🐯', rating: 5, text: 'พื้นเรียบดีมาก วิ่งยาวได้ไม่มีสะดุด ช่วงเย็นลมดี', createdAt: now - 180 * min },
+    { id: 'rv2', zoneId: 'z-bangsaen', userId: 'u2', name: 'มายด์', avatar: '🦊', rating: 4, text: 'เสาร์อาทิตย์คนเยอะมาก ต้องหลบนักท่องเที่ยวบ่อย แนะนำวันธรรมดา', createdAt: now - 420 * min },
+    { id: 'rv3', zoneId: 'z-bangsaen', userId: 'u3', name: 'ฟ้า', avatar: '🐧', rating: 5, text: 'มีน้ำดื่มกับห้องน้ำตลอดเส้น สะดวกสุดในชลบุรีแล้ว', createdAt: now - 900 * min },
+  ],
+  'z-samuk': [
+    { id: 'rv4', zoneId: 'z-samuk', userId: 'u4', name: 'กร', avatar: '🐺', rating: 5, text: 'ชันจริง ซ้อมขึ้นเขา 5 รอบขาสั่นเลย คุ้มมาก', createdAt: now - 240 * min },
+    { id: 'rv5', zoneId: 'z-samuk', userId: 'u5', name: 'นุ่น', avatar: '🦋', rating: 3, text: 'ลิงเยอะจริง อย่าถือถุงอะไรไปนะ โดนแย่งมาแล้ว', createdAt: now - 1200 * min },
+  ],
+  'z-ku-sriracha': [
+    { id: 'rv6', zoneId: 'z-ku-sriracha', userId: 'u6', name: 'บีม', avatar: '🦅', rating: 5, text: 'ลู่ยางสภาพดี เหมาะซ้อม interval มีไฟถึงสามทุ่ม', createdAt: now - 60 * min },
+  ],
+  'z-bangphra': [
+    { id: 'rv7', zoneId: 'z-bangphra', userId: 'u7', name: 'เจได', avatar: '🐉', rating: 5, text: 'long run ที่ดีที่สุดในชลบุรี รถน้อยมาก แต่ต้องพกน้ำไปเอง', createdAt: now - 300 * min },
+  ],
+};
+
+export const CHAT: Record<string, ChatMessage[]> = {
+  'z-bangsaen': [
+    { id: 'c1', zoneId: 'z-bangsaen', userId: 'u1', name: 'พีท', avatar: '🐯', text: 'พรุ่งนี้เช้า 6 โมง ใครไปบ้าง', createdAt: now - 42 * min },
+    { id: 'c2', zoneId: 'z-bangsaen', userId: 'u2', name: 'มายด์', avatar: '🦊', text: 'ไปด้วยคน วิ่ง 5K เบาๆ', createdAt: now - 38 * min },
+    { id: 'c3', zoneId: 'z-bangsaen', userId: 'u5', name: 'นุ่น', avatar: '🦋', text: 'ตอนนี้ฝนตกนะ ใครจะมาเย็นนี้เช็คก่อน', createdAt: now - 12 * min },
+  ],
+  'z-ku-sriracha': [
+    { id: 'c4', zoneId: 'z-ku-sriracha', userId: 'u6', name: 'บีม', avatar: '🦅', text: 'สนามเปิดปกติ ลู่ว่างมาก', createdAt: now - 25 * min },
+  ],
+};
