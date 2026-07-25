@@ -1,76 +1,74 @@
-import React, { useState, useEffect } from 'react';
-import { LocationSpot, PastRunHistory } from '../types';
+import React, { useEffect, useState } from 'react';
+import { useApp, useActiveRoute } from '../state/AppContext';
+import { useRunEngine } from '../state/useRunEngine';
+import { formatPace, formatDuration, coinsForRun, myRank } from '../lib/formulas';
 
-interface RunTabProps {
-  currentLocation?: LocationSpot | null;
-  onFinishRun: (earnedCoins: number, runRecord: PastRunHistory) => void;
-  onGoToShop: () => void;
-}
+const waveformHeights = [
+  14, 22, 18, 26, 20, 18, 15, 24, 12, 16, 28, 22, 19, 10, 24,
+  25, 21, 28, 14, 18, 22, 16, 24, 18, 22, 14, 20, 12, 18, 10,
+];
 
-export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, onGoToShop }) => {
-  // Run states
-  const [isFinished, setIsFinished] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [seconds, setSeconds] = useState<number>(1122); // Default ~18m 42s
-  const [distanceKm, setDistanceKm] = useState<number>(2.34);
-  const [calories, setCalories] = useState<number>(164);
-  const [isLocked, setIsLocked] = useState<boolean>(false);
+export const RunTab: React.FC = () => {
+  const { state, dispatch } = useApp();
+  const { start, pause, resume, finish, reset } = useRunEngine();
+  const activeRoute = useActiveRoute();
+  const { run, sensor, user, lastResult } = state;
 
-  // Active run timer effect
+  const [isLocked, setIsLocked] = useState(false);
+  /** เก็บ rank ก่อน RUN_FINISH ไว้ชั่วคราว เพื่อโชว์ "อันดับขยับ" ในใบเสร็จ — หลัง finish() แล้ว leaderboard เดิมหาย ย้อนไม่ได้ */
+  const [rankBeforeFinish, setRankBeforeFinish] = useState<number | null>(null);
+
+  // Stitch UI ไม่มีหน้า countdown แยก — เข้า RUN_START ทันทีที่ arm เสร็จ
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (!isFinished && !isPaused) {
-      interval = setInterval(() => {
-        setSeconds((prev) => prev + 1);
-        setDistanceKm((prev) => Number((prev + 0.002).toFixed(2)));
-        setCalories((prev) => prev + (Math.random() > 0.6 ? 1 : 0));
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isFinished, isPaused]);
+    if (run.status === 'countdown') start();
+  }, [run.status, start]);
 
-  // Format seconds to MM:SS
-  const formatTime = (totalSec: number) => {
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  // Calculate Pace (minutes per km)
-  const getPace = () => {
-    if (distanceKm <= 0) return "0'00\"";
-    const totalMinutes = seconds / 60;
-    const paceVal = totalMinutes / distanceKm;
-    const paceMin = Math.floor(paceVal);
-    const paceSec = Math.floor((paceVal - paceMin) * 60);
-    return `${paceMin}'${paceSec.toString().padStart(2, '0')}"`;
-  };
+  const isFinished = run.status === 'finished';
+  const isPaused = run.status === 'paused';
+  const locationName = activeRoute?.name ?? 'เส้นทางวิ่ง';
 
   const handleStop = () => {
-    setIsFinished(true);
+    if (activeRoute) {
+      const board = state.leaderboards[activeRoute.zoneId] ?? [];
+      setRankBeforeFinish(myRank(board, user.id));
+    }
+    finish();
   };
 
-  const handleCompleteRun = () => {
-    const earnedCoins = 78;
-    const newRecord: PastRunHistory = {
-      id: `run-${Date.now()}`,
-      date: 'วันนี้',
-      location: currentLocation ? `${currentLocation.name} จ๊อกกิ้ง 5K` : 'หาดบางแสน จ๊อกกิ้ง 5K',
-      distanceKm: distanceKm > 0 ? distanceKm : 3.65,
-      timeFormatted: formatTime(seconds),
-      pace: getPace(),
-      coinsEarned: earnedCoins
-    };
-    onFinishRun(earnedCoins, newRecord);
+  const handleDone = () => {
+    reset();
+    dispatch({ type: 'NAV', screen: 'map' });
   };
 
-  const locationName = currentLocation ? currentLocation.name : 'เลียบหาดบางแสน 4.2K';
+  // เข้ามาที่หน้า Run ตรงๆ จาก Navbar โดยยังไม่ได้ armRun จาก Map/Zone — ไม่มี route ให้วิ่ง
+  if (run.status === 'idle') {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+        <span className="material-symbols-outlined text-5xl text-[#3d4a40]">directions_run</span>
+        <p className="font-body-md text-[#3d4a40]">ยังไม่มีการวิ่งที่กำลังทำงาน ไปที่แผนที่เพื่อเลือกโซนแล้วเริ่มวิ่ง</p>
+        <button
+          onClick={() => dispatch({ type: 'NAV', screen: 'map' })}
+          className="bg-[#006a3a] text-white px-6 py-3 rounded-full border-2 border-[#14241C] hard-shadow font-headline-md"
+        >
+          ไปที่แผนที่
+        </button>
+      </div>
+    );
+  }
 
-  // Waveform heights for Cadence
-  const waveformHeights = [14, 22, 18, 26, 20, 18, 15, 24, 12, 16, 28, 22, 19, 10, 24, 25, 21, 28, 14, 18, 22, 16, 24, 18, 22, 14, 20, 12, 18, 10];
+  if (isFinished && lastResult) {
+    const zoneCheckpoints = activeRoute ? activeRoute.checkpoints.filter((c) => c.kind !== 'start') : [];
+    const checkpointCoins = activeRoute
+      ? activeRoute.checkpoints
+          .filter((c) => run.collectedCheckpointIds.includes(c.id))
+          .reduce((s, c) => s + c.coinReward, 0)
+      : 0;
+    const breakdown = coinsForRun(lastResult.distanceKm, checkpointCoins, user.streakDays);
 
-  if (isFinished) {
-    // ---------------- POST-RUN RECEIPT SUMMARY VIEW ----------------
+    const board = activeRoute ? state.leaderboards[activeRoute.zoneId] ?? [] : [];
+    const rankAfter = myRank(board, user.id);
+    const rankDelta = rankBeforeFinish != null ? rankBeforeFinish - rankAfter : 0;
+
     return (
       <div className="flex flex-col w-full gap-6 relative overflow-hidden -mt-2 pb-12">
         {/* Confetti Animation Background */}
@@ -90,15 +88,15 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
           <h1 className="font-headline-lg-mobile text-3xl text-[#14241C] uppercase text-center font-bold">
             วิ่งจบแล้ว!
           </h1>
-          
+
           {/* Reward Coin Sticker */}
           <div className="relative mt-6 transition-transform hover:scale-105 duration-300 cursor-pointer">
             <div className="w-32 h-32 bg-[#FFD84D] border-2 border-[#14241C] rounded-full flex flex-col items-center justify-center hard-shadow rotate-[-6deg] ring-[6px] ring-white">
-              <span className="font-headline-lg text-[48px] leading-none text-[#14241C]">+78</span>
+              <span className="font-headline-lg text-[48px] leading-none text-[#14241C]">+{lastResult.coinsEarned}</span>
               <span className="font-label-md text-sm text-[#14241C] uppercase mt-1">coin ที่ได้</span>
             </div>
             <div className="absolute -top-3 -right-3 bg-[#FF8A65] border-2 border-[#14241C] text-white px-3 py-1 rounded-full hard-shadow rotate-[12deg] font-label-md text-xs font-bold">
-              NEW RECORD!
+              {breakdown.capped ? 'DAILY CAP!' : 'NEW RECORD!'}
             </div>
           </div>
         </div>
@@ -115,21 +113,21 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
             </div>
 
             <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-              <span className="font-label-md">Distance 3.65 km</span>
+              <span className="font-label-md">Distance {lastResult.distanceKm} km</span>
               <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-              <span className="font-headline-md text-base">+54</span>
+              <span className="font-headline-md text-base">+{breakdown.fromDistance}</span>
             </div>
 
             <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-              <span className="font-label-md">Checkpoints 3/4</span>
+              <span className="font-label-md">Checkpoints {lastResult.checkpointsCollected}/{zoneCheckpoints.length}</span>
               <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-              <span className="font-headline-md text-base">+16</span>
+              <span className="font-headline-md text-base">+{breakdown.fromCheckpoints}</span>
             </div>
 
             <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-              <span className="font-label-md">Streak 4 days</span>
+              <span className="font-label-md">Streak {user.streakDays} days</span>
               <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-              <span className="font-headline-md text-base">+8</span>
+              <span className="font-headline-md text-base">+{breakdown.fromStreak}</span>
             </div>
 
             <div className="flex justify-between items-baseline font-body-md text-[#3d4a40]/60">
@@ -140,7 +138,7 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
 
             <div className="mt-2 pt-4 border-t-2 border-[#14241C] flex justify-between items-center">
               <span className="font-headline-md text-xl uppercase">TOTAL</span>
-              <span className="font-headline-lg text-3xl text-[#14241C]">78</span>
+              <span className="font-headline-lg text-3xl text-[#14241C]">{lastResult.coinsEarned}</span>
             </div>
 
             {/* Torn Zigzag Edge */}
@@ -156,22 +154,22 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
         <div className="grid grid-cols-2 gap-3 px-1 mt-2 z-10">
           <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[-2deg] flex flex-col">
             <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Distance</span>
-            <span className="font-headline-md text-xl text-[#14241C]">3.65 <span className="text-xs">km</span></span>
+            <span className="font-headline-md text-xl text-[#14241C]">{lastResult.distanceKm} <span className="text-xs">km</span></span>
           </div>
 
           <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[3deg] flex flex-col">
             <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Time</span>
-            <span className="font-headline-md text-xl text-[#14241C]">30:00</span>
+            <span className="font-headline-md text-xl text-[#14241C]">{formatDuration(lastResult.durationSec)}</span>
           </div>
 
           <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[1deg] flex flex-col">
             <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Avg Pace</span>
-            <span className="font-headline-md text-xl text-[#14241C]">8'14"</span>
+            <span className="font-headline-md text-xl text-[#14241C]">{formatPace(lastResult.paceSec)}</span>
           </div>
 
           <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[-3deg] flex flex-col">
             <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Calories</span>
-            <span className="font-headline-md text-xl text-[#14241C]">226 <span className="text-xs">kcal</span></span>
+            <span className="font-headline-md text-xl text-[#14241C]">{lastResult.caloriesKcal} <span className="text-xs">kcal</span></span>
           </div>
         </div>
 
@@ -179,18 +177,24 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
         <div className="bg-[#006a3a] border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-center justify-between mx-1 z-10">
           <div className="flex flex-col">
             <span className="font-handwritten-sm text-white/90">{locationName}</span>
-            <span className="font-headline-md text-white uppercase text-lg leading-tight">Rank Improved!</span>
+            <span className="font-headline-md text-white uppercase text-lg leading-tight">
+              {rankDelta > 0 ? 'Rank Improved!' : 'Rank'}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-headline-md text-white/50 line-through text-lg">#7</span>
+            {rankBeforeFinish != null && rankBeforeFinish !== rankAfter && (
+              <span className="font-headline-md text-white/50 line-through text-lg">#{rankBeforeFinish}</span>
+            )}
             <div className="relative">
               <div className="bg-[#FFD84D] border-2 border-[#14241C] px-3 py-1 rounded-xl hard-shadow rotate-[-4deg]">
-                <span className="font-headline-lg text-2xl text-[#14241C]">#4</span>
+                <span className="font-headline-lg text-2xl text-[#14241C]">#{rankAfter}</span>
               </div>
-              <div className="absolute -top-3 -right-3 bg-[#FF8A65] border-2 border-[#14241C] rounded-full px-2 py-0.5 text-white font-label-md text-xs hard-shadow">
-                +3
-              </div>
+              {rankDelta > 0 && (
+                <div className="absolute -top-3 -right-3 bg-[#FF8A65] border-2 border-[#14241C] rounded-full px-2 py-0.5 text-white font-label-md text-xs hard-shadow">
+                  +{rankDelta}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -198,16 +202,15 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
         {/* Sensor Verification Note */}
         <div className="flex items-center justify-center gap-2 px-4 py-1">
           <span className="material-symbols-outlined text-[#3d4a40] text-sm">verified_user</span>
-          <span className="text-[12px] font-body-md text-[#3d4a40]">ตรวจสอบด้วยเซนเซอร์การเคลื่อนไหว + GPS</span>
+          <span className="text-[12px] font-body-md text-[#3d4a40]">
+            ตรวจสอบด้วยเซนเซอร์การเคลื่อนไหว + GPS{lastResult.mode === 'simulate' ? ' (โหมดจำลอง — SIMULATED)' : ''}
+          </span>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-col gap-3 px-1 z-10">
           <button
-            onClick={() => {
-              handleCompleteRun();
-              onGoToShop();
-            }}
+            onClick={() => dispatch({ type: 'NAV', screen: 'shop' })}
             className="w-full bg-[#006a3a] hover:bg-[#00864b] py-3.5 rounded-full border-2 border-[#14241C] hard-shadow flex items-center justify-center gap-2 active:translate-y-[2px] transition-all"
           >
             <span className="material-symbols-outlined text-white">shopping_bag</span>
@@ -215,7 +218,7 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
           </button>
 
           <button
-            onClick={handleCompleteRun}
+            onClick={handleDone}
             className="w-full bg-white hover:bg-[#ebfef1] py-3.5 rounded-full border-2 border-[#14241C] hard-shadow flex items-center justify-center gap-2 active:translate-y-[2px] transition-all"
           >
             <span className="font-headline-md text-[#14241C] uppercase text-base">เสร็จสิ้น</span>
@@ -224,6 +227,10 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
       </div>
     );
   }
+
+  const routeCheckpoints = activeRoute ? activeRoute.checkpoints.filter((c) => c.kind !== 'start') : [];
+  const nextCheckpoint = routeCheckpoints.find((c) => !run.collectedCheckpointIds.includes(c.id)) ?? null;
+  const kmRemaining = nextCheckpoint ? Math.max(0, nextCheckpoint.atKm - run.distanceM / 1000) : 0;
 
   // ---------------- ACTIVE LIVE RUNNING MODE VIEW ----------------
   return (
@@ -237,7 +244,9 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
 
         <div className="bg-[#FFD84D] border-2 border-[#14241C] hard-shadow px-3 py-1 rounded-full flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 bg-[#FF6B6B] rounded-full animate-pulse"></div>
-          <span className="font-label-md text-xs text-[#14241C] uppercase font-bold">Sensor On</span>
+          <span className="font-label-md text-xs text-[#14241C] uppercase font-bold">
+            {run.mode === 'simulate' ? 'SIMULATED' : 'Sensor On'}
+          </span>
         </div>
       </div>
 
@@ -259,7 +268,7 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
 
         <div className="flex items-baseline gap-1 relative">
           <span className="font-display-lg text-[80px] leading-none text-[#FFD84D] drop-shadow-[4px_4px_0px_#14241C]">
-            {distanceKm.toFixed(2)}
+            {(run.distanceM / 1000).toFixed(2)}
           </span>
           <span className="font-headline-md text-2xl text-white">km</span>
         </div>
@@ -270,19 +279,19 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
         {/* Time */}
         <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-xl p-2.5 flex flex-col items-center rotate-[-2deg]">
           <span className="font-label-md text-[10px] text-[#3d4a40] uppercase">Time</span>
-          <span className="font-headline-md text-lg text-[#14241C]">{formatTime(seconds)}</span>
+          <span className="font-headline-md text-lg text-[#14241C]">{formatDuration(run.elapsedSec)}</span>
         </div>
 
         {/* Pace */}
         <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-xl p-2.5 flex flex-col items-center rotate-[1deg]">
           <span className="font-label-md text-[10px] text-[#3d4a40] uppercase">Pace</span>
-          <span className="font-headline-md text-lg text-[#14241C]">{getPace()}</span>
+          <span className="font-headline-md text-lg text-[#14241C]">{formatPace(run.currentPaceSec)}</span>
         </div>
 
         {/* Kcal */}
         <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-xl p-2.5 flex flex-col items-center rotate-[-1deg]">
           <span className="font-label-md text-[10px] text-[#3d4a40] uppercase">Kcal</span>
-          <span className="font-headline-md text-lg text-[#14241C]">{calories}</span>
+          <span className="font-headline-md text-lg text-[#14241C]">{Math.round(run.caloriesKcal)}</span>
         </div>
       </div>
 
@@ -292,7 +301,7 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
           <div className="flex flex-col">
             <span className="font-label-md text-xs text-[#3d4a40] uppercase">Cadence</span>
             <span className="font-headline-md text-xl text-[#14241C]">
-              168 <span className="text-sm font-normal">spm</span>
+              {sensor.cadence} <span className="text-sm font-normal">spm</span>
             </span>
           </div>
           <span className="font-handwritten-sm text-[#006a3a] rotate-[-5deg] mb-1 font-bold">
@@ -307,7 +316,7 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
               key={idx}
               className="flex-1 bg-[#006a3a] border-[1.5px] border-[#14241C] transition-all duration-300"
               style={{
-                height: `${isPaused ? h * 0.5 : Math.max(8, (h + Math.sin(seconds + idx) * 6))}` + 'px'
+                height: `${isPaused ? h * 0.5 : Math.max(8, h + Math.sin(run.elapsedSec + idx) * 6)}px`,
               }}
             />
           ))}
@@ -318,33 +327,38 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
       <div className="bg-white rounded-xl p-4 mb-4 border-2 border-[#14241C] hard-shadow">
         <div className="relative h-12 flex items-center justify-between px-3">
           <div className="absolute left-0 right-0 h-1 bg-[#14241C] top-1/2 -translate-y-1/2"></div>
-          
-          {/* Completed Checkpoints */}
-          <div className="relative w-8 h-8 rounded-full bg-[#006a3a] border-2 border-[#14241C] flex items-center justify-center z-10 hard-shadow">
-            <span className="material-symbols-outlined text-white text-sm">check</span>
-          </div>
 
-          <div className="relative w-8 h-8 rounded-full bg-[#006a3a] border-2 border-[#14241C] flex items-center justify-center z-10 hard-shadow">
-            <span className="material-symbols-outlined text-white text-sm">check</span>
-          </div>
-
-          {/* Current/Next Checkpoint */}
-          <div className="relative z-10">
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#FFD84D] px-2 py-0.5 border-2 border-[#14241C] hard-shadow rotate-[-3deg]">
-              <span className="font-handwritten-sm text-xs font-bold text-[#14241C]">จุดต่อไป!</span>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-[#FFD84D] border-2 border-[#14241C] flex items-center justify-center hard-shadow">
-              <span className="material-symbols-outlined text-[#14241C] text-lg">location_on</span>
-            </div>
-          </div>
-
-          {/* Upcoming */}
-          <div className="w-8 h-8 rounded-full bg-white border-2 border-[#14241C] z-10"></div>
-          <div className="w-8 h-8 rounded-full bg-white border-2 border-[#14241C] z-10"></div>
+          {routeCheckpoints.map((cp) => {
+            const collected = run.collectedCheckpointIds.includes(cp.id);
+            if (collected) {
+              return (
+                <div key={cp.id} className="relative w-8 h-8 rounded-full bg-[#006a3a] border-2 border-[#14241C] flex items-center justify-center z-10 hard-shadow">
+                  <span className="material-symbols-outlined text-white text-sm">check</span>
+                </div>
+              );
+            }
+            if (nextCheckpoint?.id === cp.id) {
+              return (
+                <div key={cp.id} className="relative z-10">
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#FFD84D] px-2 py-0.5 border-2 border-[#14241C] hard-shadow rotate-[-3deg]">
+                    <span className="font-handwritten-sm text-xs font-bold text-[#14241C]">จุดต่อไป!</span>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-[#FFD84D] border-2 border-[#14241C] flex items-center justify-center hard-shadow">
+                    <span className="material-symbols-outlined text-[#14241C] text-lg">location_on</span>
+                  </div>
+                </div>
+              );
+            }
+            return <div key={cp.id} className="w-8 h-8 rounded-full bg-white border-2 border-[#14241C] z-10"></div>;
+          })}
         </div>
 
         <p className="text-center font-body-md text-sm text-[#14241C] mt-2">
-          จุดถัดไป: <span className="font-bold text-[#006a3a]">ลานปูดำ</span> — อีก 0.8 กม.
+          {nextCheckpoint ? (
+            <>จุดถัดไป: <span className="font-bold text-[#006a3a]">{nextCheckpoint.name}</span> — อีก {kmRemaining.toFixed(1)} กม.</>
+          ) : (
+            'เก็บครบทุกจุดแล้ว ใกล้ถึงเส้นชัย!'
+          )}
         </p>
       </div>
 
@@ -378,9 +392,9 @@ export const RunTab: React.FC<RunTabProps> = ({ currentLocation, onFinishRun, on
 
         {/* Pause/Resume Button */}
         <button
-          onClick={() => setIsPaused(!isPaused)}
+          onClick={() => (isPaused ? resume() : pause())}
           className="w-20 h-20 rounded-full bg-[#FFD84D] border-2 border-[#14241C] hard-shadow flex items-center justify-center active:translate-y-[2px] transition-transform scale-110"
-          title={isPaused ? "วิ่งต่อ" : "พิกวิ่ง"}
+          title={isPaused ? 'วิ่งต่อ' : 'พักวิ่ง'}
         >
           <span className="material-symbols-outlined text-[#14241C] text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
             {isPaused ? 'play_arrow' : 'pause'}
