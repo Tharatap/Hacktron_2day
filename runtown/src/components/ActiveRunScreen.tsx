@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Polyline, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import { useApp, useActiveRoute } from '../state/AppContext';
 import { useRunEngine } from '../state/useRunEngine';
 import { formatDuration, formatPace, clamp, myRank } from '../lib/formulas';
@@ -33,18 +33,30 @@ const checkpointDivIconCollected = L.divIcon({
   iconAnchor: [7, 7],
 });
 
+/** วิ่งอิสระไม่มี zoneCenter ตายตัวให้ยึด — เลื่อนกล้องตามตำแหน่งปัจจุบันแทน (แบบแอพวิ่งทั่วไป) */
+function RecenterMap({ position, zoom }: { position: LatLng; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([position.lat, position.lng], zoom, { animate: true });
+  }, [map, position.lat, position.lng, zoom]);
+  return null;
+}
+
 function RunMinimap({
   zoneCenter,
   path,
   traveledPath,
   checkpoints,
   collectedCheckpointIds,
+  followCurrent = false,
 }: {
   zoneCenter: LatLng;
   path: LatLng[];
   traveledPath: LatLng[];
   checkpoints: Checkpoint[];
   collectedCheckpointIds: string[];
+  /** true = วิ่งอิสระ ให้กล้องเลื่อนตามตำแหน่งปัจจุบันแทนตำแหน่งคงที่ของ zone */
+  followCurrent?: boolean;
 }) {
   const current = traveledPath[traveledPath.length - 1] ?? zoneCenter;
 
@@ -62,11 +74,14 @@ function RunMinimap({
       attributionControl={false}
       style={{ width: '100%', height: '100%' }}
     >
+      {followCurrent && <RecenterMap position={current} zoom={16} />}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Polyline
-        positions={path.map((p): [number, number] => [p.lat, p.lng])}
-        pathOptions={{ color: '#6d7a6f', dashArray: '4 4', weight: 2 }}
-      />
+      {path.length > 1 && (
+        <Polyline
+          positions={path.map((p): [number, number] => [p.lat, p.lng])}
+          pathOptions={{ color: '#6d7a6f', dashArray: '4 4', weight: 2 }}
+        />
+      )}
       {traveledPath.length > 1 && (
         <Polyline
           positions={traveledPath.map((p): [number, number] => [p.lat, p.lng])}
@@ -271,23 +286,34 @@ export const ActiveRunScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Top Center Progress */}
+          {/* Top Center Progress — วิ่งอิสระไม่มี route ให้อ้างจำนวน checkpoint ทั้งหมด เลยเปลี่ยนเป็นเคาน์เตอร์สะสม tower แทนจุดไข่ปลา */}
           <div className="flex flex-col items-center gap-1">
-            <div className="bg-white border-2 border-[#14241C] px-4 py-1 rounded-full hard-shadow flex gap-1.5 items-center">
-              {routeCheckpoints.map((cp) => {
-                const collected = run.collectedCheckpointIds.includes(cp.id);
-                const isNext = cp.id === nextCheckpointId;
-                return (
-                  <div
-                    key={cp.id}
-                    className={`w-2.5 h-2.5 rounded-full border border-[#14241C] ${
-                      collected ? 'bg-[#12A05C]' : isNext ? 'bg-[#FFD84D] animate-pulse' : ''
-                    }`}
-                    style={isNext ? animState : undefined}
-                  />
-                );
-              })}
-            </div>
+            {activeRoute ? (
+              <div className="bg-white border-2 border-[#14241C] px-4 py-1 rounded-full hard-shadow flex gap-1.5 items-center">
+                {routeCheckpoints.map((cp) => {
+                  const collected = run.collectedCheckpointIds.includes(cp.id);
+                  const isNext = cp.id === nextCheckpointId;
+                  return (
+                    <div
+                      key={cp.id}
+                      className={`w-2.5 h-2.5 rounded-full border border-[#14241C] ${
+                        collected ? 'bg-[#12A05C]' : isNext ? 'bg-[#FFD84D] animate-pulse' : ''
+                      }`}
+                      style={isNext ? animState : undefined}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white border-2 border-[#14241C] px-3 py-1 rounded-full hard-shadow flex items-center gap-1">
+                <span className="material-symbols-outlined text-[#FFD84D] text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  star
+                </span>
+                <span className="font-headline-md text-sm text-[#14241C] leading-none">
+                  x{run.collectedCheckpointIds.length}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Top Right Gauge */}
@@ -320,7 +346,7 @@ export const ActiveRunScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* MINIMAP */}
+      {/* MINIMAP — โหมดเลือกโซนใช้ route.path จริง, วิ่งอิสระใช้พิกัด GPS สดจาก run.traveledPath แทน */}
       <div className="absolute bottom-[80px] left-[20px] z-20 flex flex-col gap-1 pointer-events-none">
         <span className="font-label-md text-[10px] text-[#14241C] uppercase ml-1">เส้นทาง</span>
         <div className="w-[130px] h-[100px] bg-[#D1D9D4] border-2 border-[#14241C] rounded-lg hard-shadow relative overflow-hidden">
@@ -332,7 +358,20 @@ export const ActiveRunScreen: React.FC = () => {
               checkpoints={activeRoute.checkpoints}
               collectedCheckpointIds={run.collectedCheckpointIds}
             />
-          ) : null}
+          ) : run.traveledPath.length > 0 ? (
+            <RunMinimap
+              zoneCenter={run.traveledPath[0]}
+              path={[]}
+              traveledPath={run.traveledPath}
+              checkpoints={[]}
+              collectedCheckpointIds={[]}
+              followCurrent
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-center px-2">
+              <span className="font-label-md text-[10px] text-[#3d4a40]">กำลังหาตำแหน่ง GPS...</span>
+            </div>
+          )}
         </div>
       </div>
 

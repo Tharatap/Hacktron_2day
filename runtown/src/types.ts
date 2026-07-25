@@ -338,7 +338,8 @@ export type Action =
   | { type: 'SENSOR_MODE'; mode: TrackingMode }
   | { type: 'SENSOR_SAMPLE'; magnitude: number }
   // run lifecycle
-  | { type: 'RUN_ARM'; routeId: string }
+  /** routeId เป็น null = วิ่งอิสระ ไม่ผูกกับ route/zone ใดๆ */
+  | { type: 'RUN_ARM'; routeId: string | null }
   | { type: 'RUN_START' }
   | { type: 'RUN_PAUSE' }
   | { type: 'RUN_RESUME' }
@@ -346,6 +347,8 @@ export type Action =
   | { type: 'RUN_TICK'; newSteps: number; cadence: number }
   | { type: 'RUN_FINISH' }
   | { type: 'RUN_RESET' }
+  /** ใช้แค่วาด minimap ตอนวิ่งอิสระ ไม่เกี่ยวกับการคำนวณระยะ/pace/kcal ซึ่งยังมาจากก้าวเหมือนเดิม */
+  | { type: 'RUN_GPS_UPDATE'; position: LatLng }
   // shop
   | { type: 'REDEEM'; rewardId: string }
   // planner

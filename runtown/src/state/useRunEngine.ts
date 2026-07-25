@@ -35,7 +35,7 @@ export function useRunEngine() {
    * ห้ามห่อด้วย setTimeout หรือเรียกใน useEffect
    */
   const armRun = useCallback(
-    async (routeId: string) => {
+    async (routeId: string | null) => {
       if (!isMotionSupported()) {
         dispatch({ type: 'SENSOR_PERMISSION', permission: 'unsupported' });
         dispatch({ type: 'SENSOR_MODE', mode: 'simulate' });
@@ -65,6 +65,25 @@ export function useRunEngine() {
     });
     return unsub;
   }, [status, mode, dispatch]);
+
+  // GPS จริง — เฉพาะวิ่งอิสระ (ไม่มี routeId) ใช้แค่วาด minimap เท่านั้น ไม่ยุ่งกับระยะ/pace ที่คำนวณจากก้าว
+  useEffect(() => {
+    if (status !== 'running' || state.run.routeId !== null) return;
+    if (!('geolocation' in navigator)) {
+      dispatch({ type: 'TOAST', text: 'อุปกรณ์นี้ไม่รองรับ GPS จะวิ่งต่อได้แต่ไม่เห็นแผนที่', tone: 'warn' });
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) =>
+        dispatch({
+          type: 'RUN_GPS_UPDATE',
+          position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+        }),
+      () => dispatch({ type: 'TOAST', text: 'ขอตำแหน่ง GPS ไม่สำเร็จ จะวิ่งต่อได้แต่ไม่เห็นแผนที่', tone: 'warn' }),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [status, state.run.routeId, dispatch]);
 
   // นาฬิกาหลัก — flush ก้าวที่สะสมไว้เข้า reducer ทุก 1 วินาที
   useEffect(() => {

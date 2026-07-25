@@ -25,6 +25,10 @@ import {
 /* Initial state                                                       */
 /* ------------------------------------------------------------------ */
 
+/** วิ่งอิสระ (ไม่มี route) — เก็บ "tower เสมือน" ทุกๆ ระยะนี้ ให้ reward เท่ากับ tower ปกติของ route */
+export const FREE_RUN_TOWER_INTERVAL_KM = 1;
+export const FREE_RUN_TOWER_REWARD = 15;
+
 const emptyRun: AppState['run'] = {
   status: 'idle',
   routeId: null,
@@ -167,6 +171,16 @@ export function reducer(state: AppState, action: Action): AppState {
             newlyHit = cp.name;
           }
         }
+      } else {
+        // วิ่งอิสระ ไม่มี route ให้ปลดล็อก tower เสมือนทุกๆ FREE_RUN_TOWER_INTERVAL_KM แทน
+        const towerCount = Math.floor(km / FREE_RUN_TOWER_INTERVAL_KM);
+        for (let i = 1; i <= towerCount; i++) {
+          const id = `free-tower-${i}`;
+          if (!collected.includes(id)) {
+            collected = [...collected, id];
+            newlyHit = `หอคอยที่ ${i}`;
+          }
+        }
       }
 
       // ขยับ marker ตาม progress บน polyline
@@ -201,9 +215,11 @@ export function reducer(state: AppState, action: Action): AppState {
       const distanceKm = state.run.distanceM / 1000;
       const paceSec = paceSecPerKm(state.run.distanceM, state.run.elapsedSec);
 
-      const checkpointCoins = (route?.checkpoints ?? [])
-        .filter((c) => state.run.collectedCheckpointIds.includes(c.id))
-        .reduce((s, c) => s + c.coinReward, 0);
+      const checkpointCoins = route
+        ? route.checkpoints
+            .filter((c) => state.run.collectedCheckpointIds.includes(c.id))
+            .reduce((s, c) => s + c.coinReward, 0)
+        : state.run.collectedCheckpointIds.length * FREE_RUN_TOWER_REWARD;
 
       const breakdown = coinsForRun(distanceKm, checkpointCoins, state.user.streakDays);
 
@@ -265,6 +281,13 @@ export function reducer(state: AppState, action: Action): AppState {
         run: emptyRun,
         sensor: { ...state.sensor, stepCount: 0, cadence: 0, magnitude: 0 },
       };
+
+    /** วิ่งอิสระเท่านั้นที่ dispatch action นี้ (ดู useRunEngine.ts) — ใช้แค่วาด minimap ไม่คำนวณระยะ */
+    case 'RUN_GPS_UPDATE': {
+      if (state.run.status !== 'running') return state;
+      const traveledPath = [...state.run.traveledPath, action.position].slice(-300);
+      return { ...state, run: { ...state.run, traveledPath } };
+    }
 
     /* ---------------- shop ---------------- */
     case 'REDEEM': {

@@ -115,6 +115,15 @@ export const MapTab: React.FC = () => {
         </span>
       </div>
 
+      {/* Free Run — เริ่มวิ่งได้เลยโดยไม่ต้องเลือกโซน วัดระยะ/เวลาจากจุดเริ่มถึงจุดที่กด Stop เอง */}
+      <button
+        onClick={() => armRun(null)}
+        className="w-full bg-white text-[#14241C] border-2 border-[#14241C] rounded-xl p-2.5 mb-4 hard-shadow flex items-center justify-center gap-2 font-label-md font-semibold hover:bg-[#FFD84D]/20 active:translate-y-[1px] transition-all"
+      >
+        <span className="material-symbols-outlined text-[20px]">directions_run</span>
+        เริ่มวิ่งอิสระ (ไม่ต้องเลือกโซน)
+      </button>
+
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-3 no-scrollbar">
         {filters.map((filter) => {
