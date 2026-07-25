@@ -1,0 +1,6 @@
+{
+  "name": "RunTown",
+  "description": "แอปวิ่งและชุมชนนักวิ่งชลบุรี สไตล์ Scrapbook-Brutalist พร้อมสะสม Coin ร้านค้าแลกรางวัล และแผนการซ้อม AI",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

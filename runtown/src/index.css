@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #F2F7F3;
+    color: #0f1f17;
+    font-family: 'Anuphan', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+.hard-shadow {
+  box-shadow: 3px 3px 0px 0px #14241C;
+}
+
+.hard-shadow-lg {
+  box-shadow: 5px 5px 0px 0px #14241C;
+}
+
+.hard-shadow-sm {
+  box-shadow: 2px 2px 0px 0px #14241C;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.font-headline-lg {
+  font-family: 'Mitr', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.font-headline-md {
+  font-family: 'Mitr', sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.font-display-lg {
+  font-family: 'Mitr', sans-serif;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.font-body-lg {
+  font-family: 'Anuphan', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.font-body-md {
+  font-family: 'Anuphan', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.font-label-md {
+  font-family: 'Anuphan', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.font-handwritten-sm {
+  font-family: 'Mali', cursive;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.font-headline-lg-mobile {
+  font-family: 'Mitr', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+@keyframes drift {
+  0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(800px) rotate(360deg); opacity: 0; }
+}
+
+.confetti {
+  animation: drift 4s linear infinite;
+}
