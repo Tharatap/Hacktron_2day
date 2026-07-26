@@ -1,6 +1,9 @@
 import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './state/AppContext';
 import { RunEngineProvider } from './state/useRunEngine';
+import { WelcomeScreen } from './components/WelcomeScreen';
+import { LoginScreen } from './components/LoginScreen';
+import { RegisterScreen } from './components/RegisterScreen';
 import { Header } from './components/Header';
 import { Navbar } from './components/Navbar';
 import { MapTab } from './components/MapTab';
@@ -134,12 +137,40 @@ function Shell() {
   );
 }
 
+/**
+ * Welcome/Login/Register เป็นหน้าแบบ standalone ของตัวเอง (ไม่มี Header/Navbar ของแอปหลัก
+ * ตามดีไซน์ต้นฉบับ) ยังต้องใช้กรอบ fixed+max-w-md เดียวกับ Shell เพื่อไม่ให้หลุด layout
+ * บน desktop browser เหมือนที่เคยแก้ Header/Navbar/modal ไปก่อนหน้านี้
+ */
+function AuthFrame() {
+  const { state } = useApp();
+  return (
+    <div className="fixed inset-y-0 left-1/2 -translate-x-1/2 w-full max-w-md overflow-y-auto shadow-2xl">
+      {state.ui.screen === 'welcome' && <WelcomeScreen />}
+      {state.ui.screen === 'login' && <LoginScreen />}
+      {state.ui.screen === 'register' && <RegisterScreen />}
+    </div>
+  );
+}
+
+function Root() {
+  const { state } = useApp();
+  const isAuthScreen =
+    state.ui.screen === 'welcome' || state.ui.screen === 'login' || state.ui.screen === 'register';
+
+  if (isAuthScreen) return <AuthFrame />;
+
+  return (
+    <RunEngineProvider>
+      <Shell />
+    </RunEngineProvider>
+  );
+}
+
 export default function App() {
   return (
     <AppProvider>
-      <RunEngineProvider>
-        <Shell />
-      </RunEngineProvider>
+      <Root />
     </AppProvider>
   );
 }

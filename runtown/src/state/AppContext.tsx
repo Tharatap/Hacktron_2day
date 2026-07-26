@@ -62,7 +62,7 @@ export const initialState: AppState = {
   sensor: { permission: 'unknown', mode: 'sensor', magnitude: 0, cadence: 0, stepCount: 0 },
   planner: { status: 'idle', error: null, plan: null },
   history: [],
-  ui: { screen: 'map', selectedZoneId: null, selectedRouteId: null, recoveryPrompt: false, toasts: [] },
+  ui: { screen: 'welcome', selectedZoneId: null, selectedRouteId: null, recoveryPrompt: false, toasts: [] },
   lastResult: null,
   lastResultSaved: false,
   gps: {
@@ -129,6 +129,20 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SELECT_ROUTE':
       return { ...state, ui: { ...state.ui, selectedRouteId: action.routeId } };
+
+    /* ---------------- profile ---------------- */
+    case 'SELECT_AVATAR':
+      return { ...state, user: { ...state.user, runnerAvatarId: action.avatarId } };
+
+    /* ---------------- auth (จำลอง ไม่มี backend จริง) ---------------- */
+    case 'LOGIN':
+      return { ...state, user: { ...state.user, isGuest: false }, ui: { ...state.ui, screen: 'map' } };
+
+    case 'GUEST_ENTER':
+      return { ...state, user: { ...state.user, isGuest: true }, ui: { ...state.ui, screen: 'map' } };
+
+    case 'LOGOUT':
+      return { ...state, user: { ...state.user, isGuest: true }, ui: { ...state.ui, screen: 'welcome' } };
 
     case 'ADD_CUSTOM_ROUTE':
       return pushToast({

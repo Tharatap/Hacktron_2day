@@ -322,6 +322,8 @@ export const DEFAULT_USER: User = {
   id: 'u-me',
   name: 'Aom',
   avatar: '🏃',
+  runnerAvatarId: 'female',
+  isGuest: true,
   weightKg: 58,
   heightCm: 168,
   homeZoneId: 'z-ku-sriracha',

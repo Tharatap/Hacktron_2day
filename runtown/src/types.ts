@@ -176,10 +176,16 @@ export interface RedeemedReward {
 /* User                                                                */
 /* ------------------------------------------------------------------ */
 
+/** ตัวละครวิ่งที่เลือกตอนสมัคร ใช้โชว์ sprite วิ่งจริงในหน้า Active Run */
+export type RunnerAvatarId = 'male' | 'female' | 'pig';
+
 export interface User {
   id: string;
   name: string;
   avatar: string;
+  runnerAvatarId: RunnerAvatarId;
+  /** true = เข้าใช้งานแบบแขก (ยังไม่ login/สมัคร) — คุมแค่การแสดงผลในหน้า Profile ไม่ได้ล็อกฟีเจอร์ */
+  isGuest: boolean;
   /** ใช้คำนวณแคลอรี่ */
   weightKg: number;
   /** ใช้ประมาณ stride length จากจำนวนก้าว */
@@ -305,7 +311,18 @@ export interface PlannerState {
 /* UI / navigation                                                     */
 /* ------------------------------------------------------------------ */
 
-export type Screen = 'map' | 'zone' | 'ranking' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
+export type Screen =
+  | 'welcome'
+  | 'login'
+  | 'register'
+  | 'map'
+  | 'zone'
+  | 'ranking'
+  | 'run'
+  | 'finish'
+  | 'shop'
+  | 'planner'
+  | 'profile';
 
 export interface Toast {
   id: string;
@@ -358,6 +375,12 @@ export type Action =
   | { type: 'SELECT_ZONE'; zoneId: string }
   | { type: 'SELECT_ROUTE'; routeId: string }
   | { type: 'ADD_CUSTOM_ROUTE'; route: RunRoute }
+  // profile
+  | { type: 'SELECT_AVATAR'; avatarId: RunnerAvatarId }
+  // auth — จำลองเฉยๆ ไม่มี backend จริง แค่คุม isGuest + เปลี่ยนหน้า
+  | { type: 'LOGIN' }
+  | { type: 'GUEST_ENTER' }
+  | { type: 'LOGOUT' }
   // sensor
   | { type: 'SENSOR_PERMISSION'; permission: SensorPermission }
   | { type: 'SENSOR_MODE'; mode: TrackingMode }

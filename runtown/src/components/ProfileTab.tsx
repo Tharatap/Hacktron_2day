@@ -11,7 +11,7 @@ function formatThaiDate(ts: number): string {
 type HatColor = 'green' | 'pink' | 'yellow' | 'blue';
 
 export const ProfileTab: React.FC = () => {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { user } = state;
 
   // ตกแต่ง mascot ล้วนๆ ไม่มี field รองรับใน User type (ไม่ใช่ business data ตาม STATE_DESIGN) เก็บ local เฉยๆ ไม่ persist
@@ -54,6 +54,13 @@ export const ProfileTab: React.FC = () => {
         </div>
 
         <h2 className="font-headline-md text-2xl text-[#14241C] mb-0.5">{user.name}</h2>
+        <span
+          className={`text-[10px] font-label-md px-2 py-0.5 rounded-full border border-[#14241C] mb-1 ${
+            user.isGuest ? 'bg-[#e5f8eb] text-[#3d4a40]' : 'bg-[#FFD84D] text-[#14241C]'
+          }`}
+        >
+          {user.isGuest ? '🔓 โหมดแขก' : '✅ สมาชิก'}
+        </span>
         <p className="font-handwritten-sm text-sm text-grass font-bold mb-4">
           🏆 {levelTitle}
         </p>
@@ -201,6 +208,15 @@ export const ProfileTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ออกจากระบบ — ไม่ล้างข้อมูล coin/ประวัติ แค่กลับไปหน้า Welcome + เปลี่ยนเป็นโหมดแขก */}
+      <button
+        onClick={() => dispatch({ type: 'LOGOUT' })}
+        className="w-full bg-white text-[#14241C] border-2 border-[#14241C] hard-shadow py-3 rounded-full font-headline-md text-sm flex items-center justify-center gap-2 hover:bg-[#e5f8eb] active:translate-y-[2px] transition-all"
+      >
+        <span className="material-symbols-outlined text-base">logout</span>
+        <span>ออกจากระบบ</span>
+      </button>
 
       {/* รีเซ็ตเดโม — STATE_DESIGN.md บังคับให้มี ไม่งั้นซ้อมรอบสองเริ่มใหม่ไม่ได้ */}
       <button

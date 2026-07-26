@@ -7,7 +7,6 @@ const TABS: { id: Screen; label: string; icon: string }[] = [
   { id: 'planner', label: 'Plan', icon: 'calendar_month' },
   { id: 'run', label: 'Run', icon: 'directions_run' },
   { id: 'shop', label: 'Shop', icon: 'storefront' },
-  { id: 'ranking', label: 'Ranking', icon: 'leaderboard' },
   { id: 'profile', label: 'Profile', icon: 'person' },
 ];
 
@@ -24,7 +23,7 @@ export const Navbar: React.FC = () => {
 
   return (
     <nav className="absolute bottom-0 inset-x-0 z-50 bg-white border-t-2 border-ink pb-safe" aria-label="เมนูหลัก">
-      <div className="grid grid-cols-6 items-end h-[84px] px-0.5 max-w-lg mx-auto">
+      <div className="grid grid-cols-5 items-end h-[84px] px-0.5 max-w-lg mx-auto">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const isRun = tab.id === 'run';
