@@ -83,7 +83,7 @@ export interface Zone {
 /* Route + Checkpoint                                                  */
 /* ------------------------------------------------------------------ */
 
-export type CheckpointKind = 'start' | 'tower' | 'finish';
+export type CheckpointKind = 'start' | 'tower' | 'coin' | 'chest' | 'finish';
 
 export interface Checkpoint {
   id: string;
@@ -232,9 +232,13 @@ export interface GpsState {
 }
 
 export interface RunSession {
+  sessionId: string | null;
   status: RunStatus;
   routeId: string | null;
   startedAt: number | null;
+  pausedAt: number | null;
+  totalPausedMs: number;
+  lastUpdatedAt: number | null;
   elapsedSec: number;
   steps: number;
   /** สะสมทีละช่วง เพราะ stride ผันตาม cadence — ไม่ใช่ steps × ค่าคงที่ */
@@ -301,7 +305,7 @@ export interface PlannerState {
 /* UI / navigation                                                     */
 /* ------------------------------------------------------------------ */
 
-export type Screen = 'home' | 'map' | 'zone' | 'ranking' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
+export type Screen = 'map' | 'zone' | 'ranking' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
 
 export interface Toast {
   id: string;
@@ -313,6 +317,7 @@ export interface UIState {
   screen: Screen;
   selectedZoneId: string | null;
   selectedRouteId: string | null;
+  recoveryPrompt: boolean;
   toasts: Toast[];
 }
 
@@ -352,6 +357,7 @@ export type Action =
   | { type: 'USER_WEIGHT_SET'; weightKg: number }
   | { type: 'SELECT_ZONE'; zoneId: string }
   | { type: 'SELECT_ROUTE'; routeId: string }
+  | { type: 'ADD_CUSTOM_ROUTE'; route: RunRoute }
   // sensor
   | { type: 'SENSOR_PERMISSION'; permission: SensorPermission }
   | { type: 'SENSOR_MODE'; mode: TrackingMode }
@@ -362,6 +368,11 @@ export type Action =
   | { type: 'RUN_START' }
   | { type: 'RUN_PAUSE' }
   | { type: 'RUN_RESUME' }
+  | { type: 'RUN_TIME_SYNC'; now: number }
+  | { type: 'RUN_FINISH_AND_SAVE' }
+  | { type: 'RUN_RECOVERY_CONTINUE' }
+  | { type: 'RUN_RECOVERY_FINISH' }
+  | { type: 'RUN_RECOVERY_DISCARD' }
   /** เรียกทุก 1 วินาทีจาก useRunEngine — newSteps คือก้าวที่ตรวจได้ในวินาทีนั้น */
   | { type: 'RUN_TICK'; newSteps: number; cadence: number }
   | { type: 'RUN_FINISH' }

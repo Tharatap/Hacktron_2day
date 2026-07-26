@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { useRunEngine } from '../state/useRunEngine';
+import { RoutePinPlanner } from './RoutePinPlanner';
 
 export const RunStartScreen: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -9,6 +10,7 @@ export const RunStartScreen: React.FC = () => {
   const [routeId, setRouteId] = useState<string>(state.ui.selectedRouteId ?? 'free');
   const [starting, setStarting] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const [showRouteBuilder, setShowRouteBuilder] = useState(false);
   const parsedWeight = Number(weight);
   const weightValid = Number.isFinite(parsedWeight) && parsedWeight >= 25 && parsedWeight <= 350;
 
@@ -61,9 +63,14 @@ export const RunStartScreen: React.FC = () => {
           <option value="free">วิ่งอิสระ — ติดตามเส้นทางจริง</option>
           {state.routes.map((route) => {
             const zone = state.zones.find((item) => item.id === route.zoneId);
-            return <option key={route.id} value={route.id}>{route.name} • {zone?.name ?? ''} • {route.distanceKm} km</option>;
+            const mine = route.id.startsWith('custom-') ? 'ของฉัน • ' : '';
+            return <option key={route.id} value={route.id}>{mine}{route.name} • {zone?.name ?? ''} • {route.distanceKm} km</option>;
           })}
         </select>
+        <button type="button" onClick={() => setShowRouteBuilder(true)} className="mt-3 min-h-12 w-full rounded-full border-2 border-ink bg-lemon font-label-md hard-shadow-sm">
+          <span className="material-symbols-outlined mr-2 align-middle" aria-hidden="true">add_location_alt</span>
+          ปักหมุดสร้างเส้นทางล่ารางวัล
+        </button>
       </section>
 
       <div className={`border-2 border-[#14241C] rounded-xl p-3 hard-shadow-sm flex items-start gap-3 ${gpsTone}`} role="status" aria-live="polite">
@@ -81,6 +88,8 @@ export const RunStartScreen: React.FC = () => {
       )}
 
       <p className="text-xs leading-relaxed text-ink-soft text-center px-3">แคลอรี่เป็นค่าประมาณจาก น้ำหนัก × ระยะทาง เท่านั้น ผลจริงแตกต่างตามความเร็ว ความชัน อายุ องค์ประกอบร่างกาย และปัจจัยเฉพาะบุคคล</p>
+
+      {showRouteBuilder && <RoutePinPlanner onClose={() => setShowRouteBuilder(false)} onCreated={(id) => { setRouteId(id); setShowRouteBuilder(false); }} />}
     </div>
   );
 };

@@ -51,7 +51,7 @@ export const RunTab: React.FC = () => {
 
   const goHome = (discard = false) => {
     if (!state.lastResultSaved && !discard) { setConfirmLeave(true); return; }
-    reset(); dispatch({ type: 'NAV', screen: 'home' });
+    reset(); dispatch({ type: 'NAV', screen: 'map' });
   };
 
   return (
@@ -80,13 +80,14 @@ export const RunTab: React.FC = () => {
           <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">เริ่ม</dt><dd className="text-right font-semibold">{dateTime(result.startedAt)}</dd></div>
           <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">สิ้นสุด</dt><dd className="text-right font-semibold">{dateTime(result.finishedAt)}</dd></div>
           <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">กิจกรรมวันที่</dt><dd className="text-right font-semibold">{new Date(result.finishedAt).toLocaleDateString('th-TH', { dateStyle: 'long' })}</dd></div>
+          <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">รางวัลระหว่างทาง</dt><dd className="text-right font-semibold">เก็บได้ {result.checkpointsCollected} จุด</dd></div>
           <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">GPS</dt><dd className="text-right font-semibold">ตัดจุดผิดปกติ {state.gps.rejectedPoints} จุด</dd></div>
         </dl>
       </section>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-[#FF9B8E] border-2 border-[#14241C] hard-shadow rounded-xl p-4 rotate-[-1deg]"><span className="text-xs font-label-md">ACHIEVEMENT</span><p className="font-headline-md text-lg mt-1">🏅 {achievement}</p></div>
-        <div className="bg-lemon border-2 border-ink hard-shadow rounded-xl p-4 rotate-[1deg]"><span className="text-xs font-label-md">REWARD</span><p className="font-headline-md text-lg mt-1">+{result.coinsEarned} coins</p><p className="text-xs text-ink-soft">ได้รับเมื่อบันทึก</p></div>
+        <div className="bg-lemon border-2 border-ink hard-shadow rounded-xl p-4 rotate-[1deg]"><span className="text-xs font-label-md">REWARD</span><p className="font-headline-md text-lg mt-1">+{result.coinsEarned} coins</p><p className="text-xs text-ink-soft">จากระยะและจุดสุ่ม · ได้รับเมื่อบันทึก</p></div>
       </div>
 
       <p className="text-xs leading-relaxed text-ink-soft px-2">*แคลอรี่เป็นค่าประมาณจากน้ำหนัก × ระยะทาง ไม่ใช่ค่าทางการแพทย์ ผลจริงแตกต่างตามความเร็ว ความชัน อายุ องค์ประกอบร่างกาย และสมรรถภาพ</p>

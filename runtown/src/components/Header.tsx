@@ -4,7 +4,6 @@ import type { Screen } from '../types';
 
 function titleFor(screen: Screen): string {
   switch (screen) {
-    case 'home': return 'RUNTOWN';
     case 'map': return 'EXPLORE';
     case 'zone': return 'ZONE';
     case 'run': return 'RUN';

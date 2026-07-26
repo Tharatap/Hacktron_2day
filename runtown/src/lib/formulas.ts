@@ -78,7 +78,8 @@ export function stepsToMeters(steps: number, cadenceSpm: number, heightCm: numbe
 
 /** วินาที/กม. */
 export function paceSecPerKm(distanceM: number, elapsedSec: number): number {
-  if (distanceM < 10 || elapsedSec <= 0) return 0;
+  // Hide pace during the noisy first metres; below 50 m the value is misleading.
+  if (distanceM < 50 || elapsedSec <= 0) return 0;
   return (elapsedSec / distanceM) * 1000;
 }
 

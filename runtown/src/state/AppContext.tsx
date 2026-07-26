@@ -31,9 +31,13 @@ export const FREE_RUN_TOWER_INTERVAL_KM = 1;
 export const FREE_RUN_TOWER_REWARD = 15;
 
 const emptyRun: AppState['run'] = {
+  sessionId: null,
   status: 'idle',
   routeId: null,
   startedAt: null,
+  pausedAt: null,
+  totalPausedMs: 0,
+  lastUpdatedAt: null,
   elapsedSec: 0,
   steps: 0,
   distanceM: 0,
@@ -58,7 +62,7 @@ export const initialState: AppState = {
   sensor: { permission: 'unknown', mode: 'sensor', magnitude: 0, cadence: 0, stepCount: 0 },
   planner: { status: 'idle', error: null, plan: null },
   history: [],
-  ui: { screen: 'home', selectedZoneId: null, selectedRouteId: null, toasts: [] },
+  ui: { screen: 'map', selectedZoneId: null, selectedRouteId: null, recoveryPrompt: false, toasts: [] },
   lastResult: null,
   lastResultSaved: false,
   gps: {
@@ -85,6 +89,27 @@ function couponCode(): string {
   return `RT-${out}`;
 }
 
+function activeElapsedSec(run: AppState['run'], now = Date.now()): number {
+  if (!run.startedAt) return 0;
+  const end = run.status === 'paused' && run.pausedAt ? run.pausedAt : now;
+  return Math.max(0, Math.floor((end - run.startedAt - run.totalPausedMs) / 1000));
+}
+
+function gpsSmoothingAlpha(accuracyM: number, segmentM: number): number {
+  const base = accuracyM <= 8 ? 0.58 : accuracyM <= 15 ? 0.42 : 0.28;
+  if (segmentM > 30) return Math.max(base, 0.85);
+  if (segmentM > 15) return Math.max(base, 0.68);
+  return base;
+}
+
+function smoothPosition(previous: LatLng, next: LatLng, accuracyM: number, segmentM: number): LatLng {
+  const alpha = gpsSmoothingAlpha(accuracyM, segmentM);
+  return {
+    lat: previous.lat + (next.lat - previous.lat) * alpha,
+    lng: previous.lng + (next.lng - previous.lng) * alpha,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Reducer                                                             */
 /* ------------------------------------------------------------------ */
@@ -105,6 +130,13 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SELECT_ROUTE':
       return { ...state, ui: { ...state.ui, selectedRouteId: action.routeId } };
 
+    case 'ADD_CUSTOM_ROUTE':
+      return pushToast({
+        ...state,
+        routes: [action.route, ...state.routes.filter((route) => route.id !== action.route.id)],
+        ui: { ...state.ui, selectedRouteId: action.route.id },
+      }, `สร้างเส้นทาง ${action.route.distanceKm.toFixed(2)} กม. พร้อมจุดสุ่มแล้ว`, 'success');
+
     /* ---------------- sensor ---------------- */
     case 'SENSOR_PERMISSION':
       return { ...state, sensor: { ...state.sensor, permission: action.permission } };
@@ -121,13 +153,15 @@ export function reducer(state: AppState, action: Action): AppState {
 
     /* ---------------- run lifecycle ---------------- */
     case 'RUN_ARM': {
-      const route = state.routes.find((r) => r.id === action.routeId);
+      const now = Date.now();
       return {
         ...state,
         run: {
           ...emptyRun,
+          sessionId: `session-${now}`,
           routeId: action.routeId,
           status: 'countdown',
+          lastUpdatedAt: now,
           mode: state.sensor.mode,
           traveledPath: [],
         },
@@ -136,17 +170,32 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
 
-    case 'RUN_START':
+    case 'RUN_START': {
+      const now = Date.now();
       return {
         ...state,
-        run: { ...state.run, status: 'running', startedAt: Date.now() },
+        run: { ...state.run, status: 'running', startedAt: state.run.startedAt ?? now, pausedAt: null, lastUpdatedAt: now },
       };
+    }
 
-    case 'RUN_PAUSE':
-      return { ...state, run: { ...state.run, status: 'paused' } };
+    case 'RUN_PAUSE': {
+      if (state.run.status !== 'running') return state;
+      const now = Date.now();
+      return { ...state, run: { ...state.run, status: 'paused', pausedAt: now, elapsedSec: activeElapsedSec(state.run, now), lastUpdatedAt: now } };
+    }
 
-    case 'RUN_RESUME':
-      return { ...state, run: { ...state.run, status: 'running' } };
+    case 'RUN_RESUME': {
+      if (state.run.status !== 'paused') return state;
+      const now = Date.now();
+      const pausedMs = state.run.pausedAt ? Math.max(0, now - state.run.pausedAt) : 0;
+      return { ...state, run: { ...state.run, status: 'running', pausedAt: null, totalPausedMs: state.run.totalPausedMs + pausedMs, lastUpdatedAt: now } };
+    }
+
+    case 'RUN_TIME_SYNC': {
+      if (!['running', 'paused'].includes(state.run.status)) return state;
+      const elapsedSec = activeElapsedSec(state.run, action.now);
+      return { ...state, run: { ...state.run, elapsedSec, lastUpdatedAt: action.now, currentPaceSec: paceSecPerKm(state.run.distanceM, elapsedSec) } };
+    }
 
     /**
      * หัวใจของ feature 6 — เรียกทุก 1 วินาที
@@ -166,7 +215,8 @@ export function reducer(state: AppState, action: Action): AppState {
         ? strideMeters(cadence || 150, state.user.heightCm) * newSteps
         : 0;
       const distanceM = state.run.distanceM + addedM;
-      const elapsedSec = state.run.elapsedSec + 1;
+      const now = Date.now();
+      const elapsedSec = activeElapsedSec(state.run, now);
       const steps = state.run.steps + newSteps;
 
       const kcal = estimatedCalories(state.user.weightKg, distanceM / 1000);
@@ -175,13 +225,13 @@ export function reducer(state: AppState, action: Action): AppState {
       // ปลดล็อก checkpoint ตามระยะที่ผ่านมา (แทน GPS geofence ในเดโม)
       const km = distanceM / 1000;
       let collected = state.run.collectedCheckpointIds;
-      let newlyHit: string | null = null;
+      let newlyHit: { name: string; coinReward: number; kind: string } | null = null;
       if (route) {
         for (const cp of route.checkpoints) {
-          if (cp.kind === 'start') continue;
+          if (cp.kind === 'start' || cp.coinReward <= 0) continue;
           if (km >= cp.atKm && !collected.includes(cp.id)) {
             collected = [...collected, cp.id];
-            newlyHit = cp.name;
+            newlyHit = cp;
           }
         }
       } else {
@@ -191,7 +241,7 @@ export function reducer(state: AppState, action: Action): AppState {
           const id = `free-tower-${i}`;
           if (!collected.includes(id)) {
             collected = [...collected, id];
-            newlyHit = `หอคอยที่ ${i}`;
+            newlyHit = { name: `หอคอยที่ ${i}`, coinReward: FREE_RUN_TOWER_REWARD, kind: 'tower' };
           }
         }
       }
@@ -221,18 +271,24 @@ export function reducer(state: AppState, action: Action): AppState {
           caloriesKcal: kcal,
           collectedCheckpointIds: collected,
           traveledPath,
+          lastUpdatedAt: now,
         },
         sensor: { ...state.sensor, cadence, stepCount: steps },
       };
 
-      if (newlyHit) next = pushToast(next, `เก็บจุด ${newlyHit} แล้ว +15 coin`, 'success');
+      if (newlyHit) {
+        const label = newlyHit.kind === 'chest' ? `เปิด ${newlyHit.name}` : `เก็บ ${newlyHit.name}`;
+        next = pushToast(next, `${label} ได้ ${newlyHit.coinReward} coins`, 'success');
+      }
       return next;
     }
 
     case 'RUN_FINISH': {
+      const now = Date.now();
+      const elapsedSec = activeElapsedSec(state.run, now);
       const route = state.routes.find((r) => r.id === state.run.routeId);
       const distanceKm = state.run.distanceM / 1000;
-      const paceSec = paceSecPerKm(state.run.distanceM, state.run.elapsedSec);
+      const paceSec = paceSecPerKm(state.run.distanceM, elapsedSec);
 
       const checkpointCoins = route
         ? route.checkpoints
@@ -246,10 +302,10 @@ export function reducer(state: AppState, action: Action): AppState {
         id: `run-${Date.now()}`,
         routeId: state.run.routeId ?? '',
         zoneId: route?.zoneId ?? '',
-        startedAt: state.run.startedAt ?? Date.now() - state.run.elapsedSec * 1000,
-        finishedAt: Date.now(),
+        startedAt: state.run.startedAt ?? now - elapsedSec * 1000,
+        finishedAt: now,
         distanceKm: +distanceKm.toFixed(2),
-        durationSec: state.run.elapsedSec,
+        durationSec: elapsedSec,
         paceSec,
         caloriesKcal: Math.round(state.run.caloriesKcal),
         coinsEarned: breakdown.total,
@@ -260,7 +316,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
       return {
         ...state,
-        run: { ...state.run, status: 'finished' },
+        run: { ...state.run, status: 'finished', elapsedSec, lastUpdatedAt: now },
         lastResult: record,
         lastResultSaved: false,
         ui: { ...state.ui, screen: 'finish' },
@@ -304,6 +360,39 @@ export function reducer(state: AppState, action: Action): AppState {
       }, 'บันทึกกิจกรรมแล้ว เพิ่มลงในประวัติเรียบร้อย', 'success');
     }
 
+    case 'RUN_FINISH_AND_SAVE':
+      return reducer(reducer(state, { type: 'RUN_FINISH' }), { type: 'RUN_SAVE' });
+
+    case 'RUN_RECOVERY_CONTINUE': {
+      const now = Date.now();
+      // A closed web page cannot record GPS reliably. Treat the unobserved gap as paused
+      // instead of silently inflating duration and destroying the pace calculation.
+      const totalPausedMs = state.run.status === 'running' && state.run.lastUpdatedAt
+        ? state.run.totalPausedMs + Math.max(0, now - state.run.lastUpdatedAt)
+        : state.run.totalPausedMs;
+      const recoveredRun = { ...state.run, totalPausedMs };
+      const elapsedSec = activeElapsedSec(recoveredRun, now);
+      return {
+        ...state,
+        run: { ...recoveredRun, elapsedSec, lastUpdatedAt: now, currentPaceSec: paceSecPerKm(state.run.distanceM, elapsedSec) },
+        ui: { ...state.ui, screen: 'run', recoveryPrompt: false },
+      };
+    }
+
+    case 'RUN_RECOVERY_FINISH': {
+      const now = Date.now();
+      const totalPausedMs = state.run.status === 'running' && state.run.lastUpdatedAt
+        ? state.run.totalPausedMs + Math.max(0, now - state.run.lastUpdatedAt)
+        : state.run.totalPausedMs;
+      const ready = { ...state, run: { ...state.run, totalPausedMs }, ui: { ...state.ui, recoveryPrompt: false } };
+      return reducer(ready, { type: 'RUN_FINISH_AND_SAVE' });
+    }
+
+    case 'RUN_RECOVERY_DISCARD': {
+      const reset = reducer(state, { type: 'RUN_RESET' });
+      return { ...reset, ui: { ...reset.ui, screen: 'map', recoveryPrompt: false } };
+    }
+
     case 'RUN_RESET':
       return {
         ...state,
@@ -328,8 +417,8 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'RUN_GPS_UPDATE': {
       if (!['running', 'countdown', 'paused'].includes(state.run.status)) return state;
-      const weak = action.accuracyM > 25;
-      if (!Number.isFinite(action.accuracyM) || action.accuracyM > 60) {
+      const weak = action.accuracyM > 20;
+      if (!Number.isFinite(action.accuracyM) || action.accuracyM > 30) {
         return {
           ...state,
           gps: {
@@ -341,11 +430,12 @@ export function reducer(state: AppState, action: Action): AppState {
       }
 
       const previous = state.gps.lastPosition;
+      let filteredPosition = action.position;
       let addedM = 0;
       if (previous) {
-        const segmentM = geoDistanceM(previous, action.position);
+        const rawSegmentM = geoDistanceM(previous, action.position);
         const dtSec = Math.max(0.5, (action.timestamp - (state.gps.lastFixAt ?? action.timestamp - 1000)) / 1000);
-        const implausibleJump = segmentM / dtSec > 8.5 || segmentM > Math.max(120, action.accuracyM * 4);
+        const implausibleJump = rawSegmentM / dtSec > 8.5 || rawSegmentM > Math.max(80, action.accuracyM * 4);
         if (implausibleJump) {
           return {
             ...state,
@@ -356,21 +446,39 @@ export function reducer(state: AppState, action: Action): AppState {
             },
           };
         }
-        // Ignore sub-metre jitter without preventing the accepted fix from refreshing GPS status.
-        addedM = segmentM >= 1 ? segmentM : 0;
+
+        // A 3 m deadband prevents stationary GPS noise from becoming distance or zigzags.
+        if (rawSegmentM < 3) {
+          return {
+            ...state,
+            gps: {
+              ...state.gps, permission: 'granted', quality: weak ? 'weak' : 'good',
+              accuracyM: action.accuracyM, lastFixAt: action.timestamp,
+              message: weak ? 'GPS ใช้งานได้ แต่ความแม่นยำยังต่ำ' : 'GPS พร้อมติดตามเส้นทาง',
+            },
+            run: { ...state.run, lastUpdatedAt: action.timestamp },
+          };
+        }
+
+        filteredPosition = smoothPosition(previous, action.position, action.accuracyM, rawSegmentM);
+        const filteredSegmentM = geoDistanceM(previous, filteredPosition);
+        addedM = filteredSegmentM >= 1.5 ? filteredSegmentM : 0;
       }
 
       const distanceM = state.run.distanceM + (state.run.status === 'running' ? addedM : 0);
-      const traveledPath = state.run.status === 'paused'
+      const lastDrawn = state.run.traveledPath[state.run.traveledPath.length - 1];
+      const drawThresholdM = Math.min(6, Math.max(3, action.accuracyM * 0.22));
+      const shouldDraw = !lastDrawn || geoDistanceM(lastDrawn, filteredPosition) >= drawThresholdM;
+      const traveledPath = state.run.status === 'paused' || !shouldDraw
         ? state.run.traveledPath
-        : [...state.run.traveledPath, action.position].slice(-1000);
-      return {
+        : [...state.run.traveledPath, filteredPosition].slice(-1000);
+      let next: AppState = {
         ...state,
         gps: {
           ...state.gps, permission: 'granted', quality: weak ? 'weak' : 'good',
           accuracyM: action.accuracyM, lastFixAt: action.timestamp,
           message: weak ? 'GPS ใช้งานได้ แต่ความแม่นยำยังต่ำ' : 'GPS พร้อมติดตามเส้นทาง',
-          lastPosition: action.position,
+          lastPosition: filteredPosition,
         },
         run: {
           ...state.run,
@@ -378,8 +486,27 @@ export function reducer(state: AppState, action: Action): AppState {
           traveledPath,
           currentPaceSec: paceSecPerKm(distanceM, state.run.elapsedSec),
           caloriesKcal: estimatedCalories(state.user.weightKg, distanceM / 1000),
+          lastUpdatedAt: action.timestamp,
         },
       };
+      if (state.run.status === 'running') {
+        const route = state.routes.find((item) => item.id === state.run.routeId);
+        const nearby = route?.checkpoints.find((checkpoint) =>
+          checkpoint.kind !== 'start'
+          && checkpoint.coinReward > 0
+          && !state.run.collectedCheckpointIds.includes(checkpoint.id)
+          && geoDistanceM(filteredPosition, checkpoint.position) <= Math.max(25, action.accuracyM + 12)
+        );
+        if (nearby) {
+          next = {
+            ...next,
+            run: { ...next.run, collectedCheckpointIds: [...next.run.collectedCheckpointIds, nearby.id] },
+          };
+          const label = nearby.kind === 'chest' ? `เปิด ${nearby.name}` : `เก็บ ${nearby.name}`;
+          next = pushToast(next, `${label} ได้ ${nearby.coinReward} coins`, 'success');
+        }
+      }
+      return next;
     }
 
     /* ---------------- shop ---------------- */
@@ -468,9 +595,9 @@ export function reducer(state: AppState, action: Action): AppState {
 
 const STORAGE_KEY = 'runtown.v1';
 
-/** เก็บเฉพาะสิ่งที่ผู้ใช้ "ได้มา" — ไม่เก็บ mock data และไม่เก็บ run ที่ค้างอยู่ */
 function persist(state: AppState) {
   try {
+    const hasActiveRun = ['running', 'paused', 'countdown'].includes(state.run.status);
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -478,6 +605,9 @@ function persist(state: AppState) {
         redeemed: state.redeemed,
         history: state.history,
         rewards: state.rewards,
+        customRoutes: state.routes.filter((route) => route.id.startsWith('custom-')),
+        activeRun: hasActiveRun ? state.run : null,
+        activeGps: hasActiveRun ? state.gps : null,
       })
     );
   } catch { /* โหมด private / เต็ม — ปล่อยผ่าน */ }
@@ -488,12 +618,19 @@ function hydrate(base: AppState): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return base;
     const saved = JSON.parse(raw);
+    const activeRun = saved.activeRun && ['running', 'paused'].includes(saved.activeRun.status)
+      ? { ...emptyRun, ...saved.activeRun }
+      : null;
     return {
       ...base,
       user: { ...base.user, ...saved.user },
       redeemed: saved.redeemed ?? [],
       history: saved.history ?? [],
       rewards: saved.rewards ?? base.rewards,
+      routes: [...(saved.customRoutes ?? []), ...base.routes.filter((route) => !(saved.customRoutes ?? []).some((custom: { id: string }) => custom.id === route.id))],
+      run: activeRun ?? base.run,
+      gps: activeRun ? { ...base.gps, ...saved.activeGps } : base.gps,
+      ui: activeRun ? { ...base.ui, recoveryPrompt: true, screen: 'map' } : base.ui,
     };
   } catch {
     return base;
@@ -519,7 +656,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState, hydrate);
 
-  useEffect(() => { persist(state); }, [state.user, state.redeemed, state.history, state.rewards]);
+  useEffect(() => { persist(state); }, [state.user, state.redeemed, state.history, state.rewards, state.routes, state.run, state.gps]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './state/AppContext';
+import { RunEngineProvider } from './state/useRunEngine';
 import { Header } from './components/Header';
 import { Navbar } from './components/Navbar';
 import { MapTab } from './components/MapTab';
@@ -8,7 +9,6 @@ import { RunTab } from './components/RunTab';
 import { ShopTab } from './components/ShopTab';
 import { PlanTab } from './components/PlanTab';
 import { ProfileTab } from './components/ProfileTab';
-import { HomeTab } from './components/HomeTab';
 import { RankingTab } from './components/RankingTab';
 import { RunStartScreen } from './components/RunStartScreen';
 
@@ -54,8 +54,6 @@ function CurrentScreen() {
   const { state } = useApp();
 
   switch (state.ui.screen) {
-    case 'home':
-      return <HomeTab />;
     case 'map':
     case 'zone':
       return <MapTab />;
@@ -78,6 +76,37 @@ function CurrentScreen() {
   }
 }
 
+function RunRecoveryDialog() {
+  const { state, dispatch } = useApp();
+  const continueRef = React.useRef<HTMLButtonElement>(null);
+  const { run } = state;
+
+  useEffect(() => {
+    if (state.ui.recoveryPrompt) continueRef.current?.focus();
+  }, [state.ui.recoveryPrompt]);
+
+  if (!state.ui.recoveryPrompt) return null;
+
+  return (
+    <div className="absolute inset-0 z-[1200] grid place-items-center bg-[#14241C]/65 p-5" role="dialog" aria-modal="true" aria-labelledby="recovery-title" aria-describedby="recovery-description">
+      <div className="w-full rounded-2xl border-2 border-ink bg-paper p-5 hard-shadow-lg">
+        <div className="grid h-12 w-12 place-items-center rounded-full border-2 border-ink bg-lemon hard-shadow-sm" aria-hidden="true">
+          <span className="material-symbols-outlined">history</span>
+        </div>
+        <h2 id="recovery-title" className="mt-4 font-headline-md text-2xl">พบการวิ่งที่ยังไม่จบ</h2>
+        <p id="recovery-description" className="mt-2 text-sm text-ink-soft">ข้อมูลล่าสุดยังอยู่ครบ เลือกวิ่งต่อ หรือจบกิจกรรมจากจุดที่บันทึกไว้</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl border-2 border-ink bg-white p-3 text-center">
+          <div><span className="block text-xs text-ink-soft">เวลา</span><strong className="font-headline-md tabular-nums">{Math.floor(run.elapsedSec / 60)}:{String(run.elapsedSec % 60).padStart(2, '0')}</strong></div>
+          <div><span className="block text-xs text-ink-soft">ระยะทาง</span><strong className="font-headline-md tabular-nums">{(run.distanceM / 1000).toFixed(2)} km</strong></div>
+        </div>
+        <button ref={continueRef} onClick={() => dispatch({ type: 'RUN_RECOVERY_CONTINUE' })} className="mt-5 min-h-14 w-full rounded-full border-2 border-ink bg-grass text-white hard-shadow font-headline-md">วิ่งต่อ</button>
+        <button onClick={() => dispatch({ type: 'RUN_RECOVERY_FINISH' })} className="mt-3 min-h-12 w-full rounded-full border-2 border-ink bg-lemon hard-shadow font-label-md">จบและบันทึกผล</button>
+        <button onClick={() => dispatch({ type: 'RUN_RECOVERY_DISCARD' })} className="mt-3 min-h-11 w-full rounded-full border-2 border-[#9C2D25] bg-white text-[#8A211A] font-label-md">ลบกิจกรรมนี้</button>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
   const { state } = useApp();
   const isRunScreen = state.ui.screen === 'run' && ['countdown', 'running', 'paused'].includes(state.run.status);
@@ -93,13 +122,14 @@ function Shell() {
       <main
         className={
           isRunScreen
-            ? 'flex-1 relative overflow-hidden pt-16'
+            ? 'flex-1 relative overflow-hidden'
             : 'flex-1 overflow-y-auto pt-20 pb-28 bg-paper px-4'
         }
       >
         <CurrentScreen />
       </main>
       {!isRunScreen && <Navbar />}
+      <RunRecoveryDialog />
     </div>
   );
 }
@@ -107,7 +137,9 @@ function Shell() {
 export default function App() {
   return (
     <AppProvider>
-      <Shell />
+      <RunEngineProvider>
+        <Shell />
+      </RunEngineProvider>
     </AppProvider>
   );
 }
