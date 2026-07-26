@@ -38,7 +38,7 @@ export const WelcomeScreen: React.FC = () => {
                 <img
                   alt="Friendly waving pig mascot"
                   className="h-[220px] w-auto object-contain"
-                  src="/assets/mascot-pig-wave.png"
+                  src="/assets/Gemini_Generated_Image_prhf8vprhf8vprhf-Photoroom.png"
                 />
               </div>
             </div>

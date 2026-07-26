@@ -22,7 +22,7 @@ export const LoginScreen: React.FC = () => {
           <img
             alt="Mascot"
             className="w-8 h-8 rounded-full border-2 border-white outline outline-2 outline-[#0f1f17] rotate-[-2deg] object-cover"
-            src="/assets/mascot-pig-wave.png"
+            src="/assets/Gemini_Generated_Image_prhf8vprhf8vprhf-Photoroom.png"
           />
         </div>
       </header>
@@ -32,7 +32,7 @@ export const LoginScreen: React.FC = () => {
           {/* Header Section with Mascot */}
           <div className="relative w-full pt-6 pb-4 flex flex-col items-start justify-end">
             <div className="absolute right-[-10px] transform rotate-[12deg] z-10 top-[-20px]">
-              <img alt="Mascot" className="h-[100px] w-auto object-contain" src="/assets/mascot-pig-wave.png" />
+              <img alt="Mascot" className="h-[100px] w-auto object-contain" src="/assets/Gemini_Generated_Image_prhf8vprhf8vprhf-Photoroom.png" />
             </div>
             <div className="mt-8">
               <h1 className="font-headline-lg-mobile text-[#0f1f17] mb-1">ยินดีต้อนรับกลับมา!</h1>

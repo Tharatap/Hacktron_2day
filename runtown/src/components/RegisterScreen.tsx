@@ -31,7 +31,7 @@ export const RegisterScreen: React.FC = () => {
           <img
             alt="Mascot"
             className="w-8 h-8 rounded-full border-2 border-white outline outline-2 outline-[#0f1f17] rotate-[-2deg] object-cover"
-            src="/assets/mascot-pig-wave.png"
+            src="/assets/Gemini_Generated_Image_prhf8vprhf8vprhf-Photoroom.png"
           />
         </div>
       </header>
