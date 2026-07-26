@@ -27,6 +27,7 @@ export function useRunEngine() {
   const detectorRef = useRef<StepDetector | null>(null);
   const simulatorRef = useRef(createRunSimulator(168));
   const pendingStepsRef = useRef(0);
+  const gpsIsDemo = state.gps.quality === 'demo';
 
   if (!detectorRef.current) detectorRef.current = createStepDetector();
 
@@ -35,7 +36,23 @@ export function useRunEngine() {
    * ห้ามห่อด้วย setTimeout หรือเรียกใน useEffect
    */
   const armRun = useCallback(
-    async (routeId: string | null) => {
+    async (routeId: string | null, options?: { demo?: boolean }): Promise<boolean> => {
+      detectorRef.current?.reset();
+      simulatorRef.current.reset();
+      pendingStepsRef.current = 0;
+
+      if (options?.demo) {
+        dispatch({ type: 'SENSOR_MODE', mode: 'simulate' });
+        dispatch({ type: 'RUN_ARM', routeId });
+        const route = state.routes.find((item) => item.id === routeId);
+        const initial = route?.path[0]
+          ?? state.zones.find((zone) => zone.id === state.user.homeZoneId)?.center
+          ?? { lat: 13.286, lng: 100.914 };
+        dispatch({ type: 'RUN_GPS_UPDATE', position: initial, accuracyM: 5, timestamp: Date.now() });
+        dispatch({ type: 'GPS_STATUS', permission: 'granted', quality: 'demo', accuracyM: 5, message: 'โหมดสาธิต — ใช้เส้นทางจำลอง' });
+        return true;
+      }
+
       if (!isMotionSupported()) {
         dispatch({ type: 'SENSOR_PERMISSION', permission: 'unsupported' });
         dispatch({ type: 'SENSOR_MODE', mode: 'simulate' });
@@ -47,12 +64,42 @@ export function useRunEngine() {
           dispatch({ type: 'TOAST', text: 'ใช้โหมดจำลองแทน เพราะเข้าถึงเซนเซอร์ไม่ได้', tone: 'warn' });
         }
       }
-      detectorRef.current?.reset();
-      simulatorRef.current.reset();
-      pendingStepsRef.current = 0;
-      dispatch({ type: 'RUN_ARM', routeId });
+      if (!('geolocation' in navigator)) {
+        dispatch({ type: 'GPS_STATUS', permission: 'unsupported', quality: 'unavailable', accuracyM: null, message: 'อุปกรณ์นี้ไม่รองรับ GPS' });
+        return false;
+      }
+
+      dispatch({ type: 'GPS_STATUS', quality: 'loading', accuracyM: null, message: 'กำลังขอตำแหน่งปัจจุบัน…' });
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 15000,
+          });
+        });
+        dispatch({ type: 'RUN_ARM', routeId });
+        dispatch({
+          type: 'RUN_GPS_UPDATE',
+          position: { lat: position.coords.latitude, lng: position.coords.longitude },
+          accuracyM: position.coords.accuracy,
+          timestamp: position.timestamp || Date.now(),
+        });
+        return true;
+      } catch (error) {
+        const geoError = error as GeolocationPositionError;
+        const denied = geoError?.code === 1;
+        dispatch({
+          type: 'GPS_STATUS',
+          permission: denied ? 'denied' : 'unknown',
+          quality: 'unavailable',
+          accuracyM: null,
+          message: denied ? 'ปิดการเข้าถึงตำแหน่งอยู่ เปิดสิทธิ์ Location แล้วลองใหม่' : 'ยังหาตำแหน่งไม่ได้ ลองออกไปในที่โล่งแล้วกดอีกครั้ง',
+        });
+        return false;
+      }
     },
-    [dispatch]
+    [dispatch, state.routes, state.user.homeZoneId, state.zones]
   );
 
   // ฟัง devicemotion เฉพาะตอนวิ่งจริงในโหมด sensor
@@ -66,24 +113,46 @@ export function useRunEngine() {
     return unsub;
   }, [status, mode, dispatch]);
 
-  // GPS จริง — เฉพาะวิ่งอิสระ (ไม่มี routeId) ใช้แค่วาด minimap เท่านั้น ไม่ยุ่งกับระยะ/pace ที่คำนวณจากก้าว
+  // GPS จริง — ทุก session ใช้ตำแหน่งที่กรองแล้วเป็นแหล่งคำนวณระยะหลัก
   useEffect(() => {
-    if (status !== 'running' || state.run.routeId !== null) return;
+    if (!['running', 'paused'].includes(status) || gpsIsDemo) return;
     if (!('geolocation' in navigator)) {
-      dispatch({ type: 'TOAST', text: 'อุปกรณ์นี้ไม่รองรับ GPS จะวิ่งต่อได้แต่ไม่เห็นแผนที่', tone: 'warn' });
+      dispatch({ type: 'GPS_STATUS', permission: 'unsupported', quality: 'unavailable', message: 'อุปกรณ์นี้ไม่รองรับ GPS' });
       return;
     }
     const watchId = navigator.geolocation.watchPosition(
-      (pos) =>
+      (pos) => {
         dispatch({
           type: 'RUN_GPS_UPDATE',
           position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-        }),
-      () => dispatch({ type: 'TOAST', text: 'ขอตำแหน่ง GPS ไม่สำเร็จ จะวิ่งต่อได้แต่ไม่เห็นแผนที่', tone: 'warn' }),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+          accuracyM: pos.coords.accuracy,
+          timestamp: pos.timestamp || Date.now(),
+        });
+      },
+      (error) => {
+        const denied = error.code === error.PERMISSION_DENIED;
+        dispatch({
+          type: 'GPS_STATUS',
+          permission: denied ? 'denied' : undefined,
+          quality: 'unavailable',
+          message: denied ? 'สิทธิ์ Location ถูกปิดระหว่างวิ่ง' : 'สัญญาณ GPS หาย — หยุดเพิ่มระยะชั่วคราว',
+        });
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [status, state.run.routeId, dispatch]);
+  }, [status, gpsIsDemo, dispatch]);
+
+  // A watch can go silent without firing an error. Downgrade the status so users know distance is frozen.
+  useEffect(() => {
+    if (!['running', 'paused'].includes(status) || gpsIsDemo || !state.gps.lastFixAt || state.gps.quality === 'unavailable') return;
+    const id = setInterval(() => {
+      if (Date.now() - (state.gps.lastFixAt ?? 0) > 15_000) {
+        dispatch({ type: 'GPS_STATUS', quality: 'weak', message: 'ไม่ได้รับจุด GPS ใหม่ ระยะจะไม่เพิ่มจนกว่าสัญญาณกลับมา' });
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [dispatch, gpsIsDemo, state.gps.lastFixAt, state.gps.quality, status]);
 
   // นาฬิกาหลัก — flush ก้าวที่สะสมไว้เข้า reducer ทุก 1 วินาที
   useEffect(() => {

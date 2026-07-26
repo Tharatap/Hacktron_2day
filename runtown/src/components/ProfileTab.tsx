@@ -54,13 +54,13 @@ export const ProfileTab: React.FC = () => {
         </div>
 
         <h2 className="font-headline-md text-2xl text-[#14241C] mb-0.5">{user.name}</h2>
-        <p className="font-handwritten-sm text-sm text-[#006a3a] font-bold mb-4">
+        <p className="font-handwritten-sm text-sm text-grass font-bold mb-4">
           🏆 {levelTitle}
         </p>
 
         {/* Mascot Gear Hat Customizer */}
         <div className="bg-[#e5f8eb] border-2 border-[#14241C] p-3 rounded-xl w-full flex flex-col items-center">
-          <span className="font-label-md text-xs text-[#3d4a40] mb-2 font-bold">
+          <span className="font-label-md text-xs text-ink-soft mb-2 font-bold">
             🧢 ตกแต่งหมวกน้องหมู Mascot
           </span>
           <div className="flex gap-3">
@@ -91,7 +91,7 @@ export const ProfileTab: React.FC = () => {
         </div>
 
         <div className="bg-white border-2 border-[#14241C] hard-shadow p-4 rounded-xl rotate-[1.5deg]">
-          <span className="text-xs font-label-md text-[#3d4a40] uppercase font-bold">
+          <span className="text-xs font-label-md text-ink-soft uppercase font-bold">
             TOTAL RUNS
           </span>
           <p className="font-headline-lg text-3xl text-[#14241C] mt-1">
@@ -100,19 +100,19 @@ export const ProfileTab: React.FC = () => {
         </div>
 
         <div className="bg-white border-2 border-[#14241C] hard-shadow p-4 rounded-xl rotate-[1deg]">
-          <span className="text-xs font-label-md text-[#3d4a40] uppercase font-bold">
+          <span className="text-xs font-label-md text-ink-soft uppercase font-bold">
             COIN BALANCE
           </span>
-          <p className="font-headline-lg text-3xl text-[#006a3a] mt-1">
+          <p className="font-headline-lg text-3xl text-grass mt-1">
             {user.coins} <span className="text-sm font-normal">🪙</span>
           </p>
         </div>
 
-        <div className="bg-[#FF8A65] text-white border-2 border-[#14241C] hard-shadow p-4 rounded-xl rotate-[-2deg]">
-          <span className="text-xs font-label-md uppercase font-bold text-white/90">
+        <div className="bg-coral text-ink border-2 border-ink hard-shadow p-4 rounded-xl rotate-[-2deg]">
+          <span className="text-xs font-label-md uppercase font-bold">
             RUN STREAK
           </span>
-          <p className="font-headline-lg text-3xl text-white mt-1">
+          <p className="font-headline-lg text-3xl text-ink mt-1">
             {user.streakDays} <span className="text-sm font-normal">วันรวด</span>
           </p>
         </div>
@@ -129,7 +129,7 @@ export const ProfileTab: React.FC = () => {
             <span className="text-2xl">🏖️</span>
             <div>
               <p className="font-headline-md text-xs text-[#14241C]">Beach Runner</p>
-              <p className="text-[10px] text-[#3d4a40]">วิ่งเลียบหาดบางแสน</p>
+              <p className="text-xs text-ink-soft">วิ่งเลียบหาดบางแสน</p>
             </div>
           </div>
 
@@ -137,7 +137,7 @@ export const ProfileTab: React.FC = () => {
             <span className="text-2xl">⚡</span>
             <div>
               <p className="font-headline-md text-xs text-[#14241C]">5K Finisher</p>
-              <p className="text-[10px] text-[#3d4a40]">พิชิตระยะ 5K</p>
+              <p className="text-xs text-ink-soft">พิชิตระยะ 5K</p>
             </div>
           </div>
 
@@ -145,7 +145,7 @@ export const ProfileTab: React.FC = () => {
             <span className="text-2xl">🌙</span>
             <div>
               <p className="font-headline-md text-xs text-[#14241C]">Night Jogger</p>
-              <p className="text-[10px] text-[#3d4a40]">วิ่งยามค่ำคืน</p>
+              <p className="text-xs text-ink-soft">วิ่งยามค่ำคืน</p>
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export const ProfileTab: React.FC = () => {
             <span className="text-2xl">⛰️</span>
             <div>
               <p className="font-headline-md text-xs text-[#14241C]">Trail Master</p>
-              <p className="text-[10px] text-[#3d4a40]">วิ่งเทรลเขาสามมุข (ยังไม่ปลด)</p>
+              <p className="text-xs text-ink-soft">วิ่งเทรลเขาสามมุข (ยังไม่ปลด)</p>
             </div>
           </div>
         </div>
@@ -166,7 +166,7 @@ export const ProfileTab: React.FC = () => {
         </h3>
 
         {state.history.length === 0 ? (
-          <p className="text-sm text-[#3d4a40] text-center py-4">ยังไม่มีประวัติการวิ่ง ไปเริ่มวิ่งที่หน้าแผนที่กันเลย</p>
+          <p className="text-sm text-ink-soft text-center py-4">ยังไม่มีประวัติการวิ่ง กด Run ตรงกลางเมนูเพื่อเริ่มได้เลย</p>
         ) : (
           <div className="flex flex-col gap-3">
             {state.history.map((run) => {
@@ -179,19 +179,19 @@ export const ProfileTab: React.FC = () => {
                 >
                   <div className="flex flex-col">
                     <span className="font-headline-md text-sm text-[#14241C]">
-                      {zone?.name ?? route?.name ?? 'ไม่ทราบโซน'}
+                      {zone?.name ?? route?.name ?? 'วิ่งอิสระ'}
                       {run.mode === 'simulate' ? ' (SIMULATED)' : ''}
                     </span>
-                    <span className="text-xs text-[#3d4a40]">
+                    <span className="text-xs text-ink-soft">
                       {formatThaiDate(run.finishedAt)} • {formatDuration(run.durationSec)} • Pace {formatPace(run.paceSec)}
                     </span>
                   </div>
 
                   <div className="flex flex-col items-end">
-                    <span className="font-headline-md text-base text-[#006a3a]">
+                    <span className="font-headline-md text-base text-grass">
                       {run.distanceKm} km
                     </span>
-                    <span className="text-[11px] font-bold text-[#FFD84D] bg-[#14241C] px-1.5 py-0.2 rounded">
+                    <span className="text-xs font-bold text-lemon bg-ink px-1.5 py-0.5 rounded">
                       +{run.coinsEarned} Coins
                     </span>
                   </div>

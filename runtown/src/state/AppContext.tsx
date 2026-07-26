@@ -17,8 +17,9 @@ import {
   ZONES, ROUTES, MERCHANTS, REWARDS, REVIEWS, CHAT, LEADERBOARDS, DEFAULT_USER,
 } from '../data/mockData';
 import {
-  strideMeters, paceSecPerKm, speedKmh, caloriesKcal, coinsForRun,
-  paceTierFromPace, distanceTierFromKm, pointAlongPath,
+  strideMeters, paceSecPerKm, coinsForRun, estimatedCalories,
+  paceTierFromPace, distanceTierFromKm, pointAlongPath, distanceM as geoDistanceM,
+  metersToLatLngOffset,
 } from '../lib/formulas';
 
 /* ------------------------------------------------------------------ */
@@ -57,8 +58,14 @@ export const initialState: AppState = {
   sensor: { permission: 'unknown', mode: 'sensor', magnitude: 0, cadence: 0, stepCount: 0 },
   planner: { status: 'idle', error: null, plan: null },
   history: [],
-  ui: { screen: 'map', selectedZoneId: null, selectedRouteId: null, toasts: [] },
+  ui: { screen: 'home', selectedZoneId: null, selectedRouteId: null, toasts: [] },
   lastResult: null,
+  lastResultSaved: false,
+  gps: {
+    permission: 'unknown', quality: 'idle', accuracyM: null,
+    lastFixAt: null, rejectedPoints: 0, message: 'ยังไม่ได้ตรวจสอบ GPS',
+    lastPosition: null,
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -87,6 +94,10 @@ export function reducer(state: AppState, action: Action): AppState {
     /* ---------------- navigation ---------------- */
     case 'NAV':
       return { ...state, ui: { ...state.ui, screen: action.screen } };
+
+    case 'USER_WEIGHT_SET':
+      if (!Number.isFinite(action.weightKg) || action.weightKg <= 0 || action.weightKg > 350) return state;
+      return { ...state, user: { ...state.user, weightKg: action.weightKg } };
 
     case 'SELECT_ZONE':
       return { ...state, ui: { ...state.ui, selectedZoneId: action.zoneId, screen: 'zone' } };
@@ -118,7 +129,7 @@ export function reducer(state: AppState, action: Action): AppState {
           routeId: action.routeId,
           status: 'countdown',
           mode: state.sensor.mode,
-          traveledPath: route ? [route.path[0]] : [],
+          traveledPath: [],
         },
         sensor: { ...state.sensor, stepCount: 0, cadence: 0 },
         ui: { ...state.ui, screen: 'run', selectedRouteId: action.routeId },
@@ -150,13 +161,15 @@ export function reducer(state: AppState, action: Action): AppState {
       const { newSteps, cadence } = action;
       const route = state.routes.find((r) => r.id === state.run.routeId);
 
-      const addedM = strideMeters(cadence || 150, state.user.heightCm) * newSteps;
+      // Real sessions use filtered GPS distance. Step distance is only a clearly labelled demo fallback.
+      const addedM = state.gps.quality === 'demo'
+        ? strideMeters(cadence || 150, state.user.heightCm) * newSteps
+        : 0;
       const distanceM = state.run.distanceM + addedM;
       const elapsedSec = state.run.elapsedSec + 1;
       const steps = state.run.steps + newSteps;
 
-      const kmh = speedKmh(distanceM, elapsedSec);
-      const kcal = caloriesKcal(state.user.weightKg, kmh, elapsedSec);
+      const kcal = estimatedCalories(state.user.weightKg, distanceM / 1000);
       const pace = paceSecPerKm(distanceM, elapsedSec);
 
       // ปลดล็อก checkpoint ตามระยะที่ผ่านมา (แทน GPS geofence ในเดโม)
@@ -185,10 +198,16 @@ export function reducer(state: AppState, action: Action): AppState {
 
       // ขยับ marker ตาม progress บน polyline
       let traveledPath: LatLng[] = state.run.traveledPath;
-      if (route && route.distanceKm > 0) {
+      if (state.gps.quality === 'demo' && route && route.distanceKm > 0) {
         const progress = Math.min(km / route.distanceKm, 1);
         const pt = pointAlongPath(route.path, progress);
         traveledPath = [...traveledPath, pt];
+      } else if (state.gps.quality === 'demo' && !route && addedM > 0) {
+        const previous = traveledPath[traveledPath.length - 1]
+          ?? state.zones.find((z) => z.id === state.user.homeZoneId)?.center
+          ?? { lat: 13.286, lng: 100.914 };
+        const { dLat, dLng } = metersToLatLngOffset(previous.lat, addedM * 0.82, addedM * 0.18);
+        traveledPath = [...traveledPath, { lat: previous.lat + dLat, lng: previous.lng + dLng }];
       }
 
       let next: AppState = {
@@ -227,6 +246,7 @@ export function reducer(state: AppState, action: Action): AppState {
         id: `run-${Date.now()}`,
         routeId: state.run.routeId ?? '',
         zoneId: route?.zoneId ?? '',
+        startedAt: state.run.startedAt ?? Date.now() - state.run.elapsedSec * 1000,
         finishedAt: Date.now(),
         distanceKm: +distanceKm.toFixed(2),
         durationSec: state.run.elapsedSec,
@@ -235,58 +255,131 @@ export function reducer(state: AppState, action: Action): AppState {
         coinsEarned: breakdown.total,
         checkpointsCollected: state.run.collectedCheckpointIds.filter((id) => !id.endsWith('-start')).length,
         mode: state.run.mode,
+        traveledPath: state.run.traveledPath,
       };
-
-      const weeklyDistanceKm = +(state.user.weeklyDistanceKm + distanceKm).toFixed(1);
-
-      // อัปเดตแถวของเราใน leaderboard ของโซนนั้น -> หน้า Finish โชว์ "อันดับขยับ" ได้
-      const leaderboards = { ...state.leaderboards };
-      if (route) {
-        const rows = (leaderboards[route.zoneId] ?? []).map((e) =>
-          e.userId === state.user.id
-            ? {
-                ...e,
-                distanceKm: weeklyDistanceKm,
-                paceSec: paceSec || e.paceSec,
-                paceTier: paceTierFromPace(paceSec || e.paceSec),
-                distanceTier: distanceTierFromKm(weeklyDistanceKm),
-                runsThisWeek: e.runsThisWeek + 1,
-              }
-            : e
-        );
-        leaderboards[route.zoneId] = rows.sort((a, b) => b.distanceKm - a.distanceKm);
-      }
 
       return {
         ...state,
         run: { ...state.run, status: 'finished' },
         lastResult: record,
+        lastResultSaved: false,
+        ui: { ...state.ui, screen: 'finish' },
+      };
+    }
+
+    case 'RUN_SAVE': {
+      const record = state.lastResult;
+      if (!record || state.lastResultSaved || state.history.some((item) => item.id === record.id)) return state;
+      const route = state.routes.find((item) => item.id === record.routeId);
+      const weeklyDistanceKm = +(state.user.weeklyDistanceKm + record.distanceKm).toFixed(1);
+      const leaderboards = { ...state.leaderboards };
+      if (route) {
+        const rows = (leaderboards[route.zoneId] ?? []).map((entry) =>
+          entry.userId === state.user.id
+            ? {
+                ...entry,
+                distanceKm: weeklyDistanceKm,
+                paceSec: record.paceSec || entry.paceSec,
+                paceTier: paceTierFromPace(record.paceSec || entry.paceSec),
+                distanceTier: distanceTierFromKm(weeklyDistanceKm),
+                runsThisWeek: entry.runsThisWeek + 1,
+              }
+            : entry
+        );
+        leaderboards[route.zoneId] = rows.sort((a, b) => b.distanceKm - a.distanceKm);
+      }
+      return pushToast({
+        ...state,
         history: [record, ...state.history],
+        lastResultSaved: true,
         leaderboards,
         user: {
           ...state.user,
-          coins: state.user.coins + breakdown.total,
-          totalDistanceKm: +(state.user.totalDistanceKm + distanceKm).toFixed(1),
+          coins: state.user.coins + record.coinsEarned,
+          totalDistanceKm: +(state.user.totalDistanceKm + record.distanceKm).toFixed(1),
           weeklyDistanceKm,
-          paceTier: paceSec ? paceTierFromPace(paceSec) : state.user.paceTier,
+          paceTier: record.paceSec ? paceTierFromPace(record.paceSec) : state.user.paceTier,
           distanceTier: distanceTierFromKm(weeklyDistanceKm),
         },
-        ui: { ...state.ui, screen: 'finish' },
-      };
+      }, 'บันทึกกิจกรรมแล้ว เพิ่มลงในประวัติเรียบร้อย', 'success');
     }
 
     case 'RUN_RESET':
       return {
         ...state,
         run: emptyRun,
+        lastResult: null,
+        lastResultSaved: false,
+        gps: { ...state.gps, quality: 'idle', accuracyM: null, lastFixAt: null, rejectedPoints: 0, message: 'พร้อมตรวจสอบ GPS', lastPosition: null },
         sensor: { ...state.sensor, stepCount: 0, cadence: 0, magnitude: 0 },
       };
 
-    /** วิ่งอิสระเท่านั้นที่ dispatch action นี้ (ดู useRunEngine.ts) — ใช้แค่วาด minimap ไม่คำนวณระยะ */
+    case 'GPS_STATUS':
+      return {
+        ...state,
+        gps: {
+          ...state.gps,
+          permission: action.permission ?? state.gps.permission,
+          quality: action.quality,
+          accuracyM: action.accuracyM === undefined ? state.gps.accuracyM : action.accuracyM,
+          message: action.message,
+        },
+      };
+
     case 'RUN_GPS_UPDATE': {
-      if (state.run.status !== 'running') return state;
-      const traveledPath = [...state.run.traveledPath, action.position].slice(-300);
-      return { ...state, run: { ...state.run, traveledPath } };
+      if (!['running', 'countdown', 'paused'].includes(state.run.status)) return state;
+      const weak = action.accuracyM > 25;
+      if (!Number.isFinite(action.accuracyM) || action.accuracyM > 60) {
+        return {
+          ...state,
+          gps: {
+            ...state.gps, permission: 'granted', quality: 'weak', accuracyM: action.accuracyM,
+            rejectedPoints: state.gps.rejectedPoints + 1,
+            message: 'สัญญาณอ่อน กำลังรอจุดที่แม่นยำกว่า',
+          },
+        };
+      }
+
+      const previous = state.gps.lastPosition;
+      let addedM = 0;
+      if (previous) {
+        const segmentM = geoDistanceM(previous, action.position);
+        const dtSec = Math.max(0.5, (action.timestamp - (state.gps.lastFixAt ?? action.timestamp - 1000)) / 1000);
+        const implausibleJump = segmentM / dtSec > 8.5 || segmentM > Math.max(120, action.accuracyM * 4);
+        if (implausibleJump) {
+          return {
+            ...state,
+            gps: {
+              ...state.gps, permission: 'granted', quality: 'weak', accuracyM: action.accuracyM,
+              rejectedPoints: state.gps.rejectedPoints + 1,
+              message: 'ตัดจุด GPS ที่กระโดดผิดปกติออกแล้ว',
+            },
+          };
+        }
+        // Ignore sub-metre jitter without preventing the accepted fix from refreshing GPS status.
+        addedM = segmentM >= 1 ? segmentM : 0;
+      }
+
+      const distanceM = state.run.distanceM + (state.run.status === 'running' ? addedM : 0);
+      const traveledPath = state.run.status === 'paused'
+        ? state.run.traveledPath
+        : [...state.run.traveledPath, action.position].slice(-1000);
+      return {
+        ...state,
+        gps: {
+          ...state.gps, permission: 'granted', quality: weak ? 'weak' : 'good',
+          accuracyM: action.accuracyM, lastFixAt: action.timestamp,
+          message: weak ? 'GPS ใช้งานได้ แต่ความแม่นยำยังต่ำ' : 'GPS พร้อมติดตามเส้นทาง',
+          lastPosition: action.position,
+        },
+        run: {
+          ...state.run,
+          distanceM,
+          traveledPath,
+          currentPaceSec: paceSecPerKm(distanceM, state.run.elapsedSec),
+          caloriesKcal: estimatedCalories(state.user.weightKg, distanceM / 1000),
+        },
+      };
     }
 
     /* ---------------- shop ---------------- */

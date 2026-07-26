@@ -84,8 +84,8 @@ export const PlanTab: React.FC = () => {
       {!plan ? (
         // ยังไม่มีแผนซ้อม (state.planner.plan เป็น null) — ไม่มี mock data ให้โชว์เหมือนหน้าอื่น
         <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-          <span className="material-symbols-outlined text-5xl text-[#3d4a40]">calendar_month</span>
-          <p className="font-body-md text-[#3d4a40]">
+          <span className="material-symbols-outlined text-5xl text-ink-soft">calendar_month</span>
+          <p className="font-body-md text-ink-soft">
             {isGenerating ? 'กำลังคำนวณแผน... ⏳' : 'ยังไม่มีแผนซ้อม กดสร้างแผนด้วย AI เพื่อเริ่มต้น'}
           </p>
           <button
@@ -137,12 +137,12 @@ export const PlanTab: React.FC = () => {
           <div className="bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4">
             <div className="flex justify-between items-end mb-2">
               <div className="flex flex-col">
-                <span className="font-label-md text-xs text-[#3d4a40] uppercase opacity-70">
+                <span className="font-label-md text-xs text-ink-soft uppercase">
                   PROGRESS
                 </span>
                 <span className="font-headline-md text-2xl text-[#14241C]">
                   {totalDoneKm.toFixed(1)}{' '}
-                  <span className="text-sm font-normal text-[#3d4a40]">/ {plan.goalKm} km</span>
+                  <span className="text-sm font-normal text-ink-soft">/ {plan.goalKm} km</span>
                 </span>
               </div>
 
@@ -193,7 +193,7 @@ export const PlanTab: React.FC = () => {
                   }`}
                 >
                   <div className="flex flex-col items-center min-w-[50px]">
-                    <span className="font-label-md text-xs text-[#3d4a40] font-bold">{dayLabel(item.date)}</span>
+                    <span className="font-label-md text-xs text-ink-soft font-bold">{dayLabel(item.date)}</span>
                     <span className="font-headline-md text-2xl font-bold">{dateNum(item.date)}</span>
                   </div>
 
@@ -201,7 +201,7 @@ export const PlanTab: React.FC = () => {
 
                   <div className="flex-1 flex flex-col gap-0.5 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`${TYPE_COLOR[item.type]} px-2.5 py-0.5 border-2 border-[#14241C] rounded-full font-label-md text-[10px] font-bold uppercase`}>
+                      <span className={`${TYPE_COLOR[item.type]} px-2.5 py-0.5 border-2 border-ink rounded-full font-label-md text-xs font-bold uppercase`}>
                         {TYPE_LABEL[item.type]}
                       </span>
                       <span className="font-headline-md text-base font-bold">
@@ -209,12 +209,12 @@ export const PlanTab: React.FC = () => {
                       </span>
                     </div>
 
-                    <p className="font-body-md text-xs text-[#3d4a40] truncate">
+                    <p className="font-body-md text-xs text-ink-soft truncate">
                       {zone ? `${zone.name} — ${item.note}` : item.note}
                     </p>
 
                     {item.timeSlot && (
-                      <span className="font-label-md text-[10px] text-[#3d4a40]/80">
+                      <span className="font-label-md text-xs text-ink-soft">
                         ⏰ {item.timeSlot}
                       </span>
                     )}
@@ -278,7 +278,7 @@ export const PlanTab: React.FC = () => {
 
             <div className="flex flex-col gap-4 mb-6">
               <div>
-                <label className="font-label-md text-xs text-[#3d4a40] mb-1 block font-bold">
+                <label className="font-label-md text-xs text-ink-soft mb-1 block font-bold">
                   เป้าหมายระยะทางรวม (กม.)
                 </label>
                 <input
@@ -290,7 +290,7 @@ export const PlanTab: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-label-md text-xs text-[#3d4a40] mb-1 block font-bold">
+                <label className="font-label-md text-xs text-ink-soft mb-1 block font-bold">
                   จำนวนวันในแผนซ้อม
                 </label>
                 <input
@@ -302,7 +302,7 @@ export const PlanTab: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-label-md text-xs text-[#3d4a40] mb-1 block font-bold">
+                <label className="font-label-md text-xs text-ink-soft mb-1 block font-bold">
                   เงื่อนไขเวลา / ข้อจำกัดของคุณ
                 </label>
                 <textarea

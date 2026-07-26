@@ -1,221 +1,105 @@
 import React, { useState } from 'react';
-import { useApp, useActiveRoute, FREE_RUN_TOWER_REWARD } from '../state/AppContext';
+import L from 'leaflet';
+import { MapContainer, Polyline, TileLayer } from 'react-leaflet';
+import { useActiveRoute, useApp } from '../state/AppContext';
 import { useRunEngine } from '../state/useRunEngine';
-import { formatPace, formatDuration, coinsForRun, myRank } from '../lib/formulas';
-import { consumeRankBeforeFinish } from '../state/finishSnapshot';
+import { formatDuration, formatPace } from '../lib/formulas';
+import { ShareResultSheet } from './ShareResultSheet';
+import type { LatLng } from '../types';
 
-/**
- * เหลือแค่ใบเสร็จจบวิ่ง (screen 'finish') — ฉาก active-run ย้ายไปอยู่ที่
- * ActiveRunScreen.tsx ทั้งหมดแล้ว (รวมปุ่ม pause/stop/lock, waveform, checkpoint strip)
- */
+function SummaryMap({ path, fallback }: { path: LatLng[]; fallback: LatLng }) {
+  const center = path[Math.floor(path.length / 2)] ?? fallback;
+  const bounds = path.length > 1 ? L.latLngBounds(path.map((point) => [point.lat, point.lng] as [number, number])) : undefined;
+  return (
+    <MapContainer center={[center.lat, center.lng]} bounds={bounds} boundsOptions={{ padding: [24, 24] }} zoom={15} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} touchZoom={false} zoomControl={false} attributionControl={false} className="h-full w-full">
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      {path.length > 1 && <Polyline positions={path.map((point) => [point.lat, point.lng] as [number, number])} pathOptions={{ color: '#FF5D50', weight: 6 }} />}
+    </MapContainer>
+  );
+}
+
+function dateTime(ts: number) {
+  return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ts));
+}
+
 export const RunTab: React.FC = () => {
   const { state, dispatch } = useApp();
   const { reset } = useRunEngine();
   const activeRoute = useActiveRoute();
-  const { run, user, lastResult } = state;
+  const [showShare, setShowShare] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const result = state.lastResult;
 
-  // อ่านครั้งเดียวตอน mount — ActiveRunScreen เป็นคน capture ค่านี้ไว้ตอนกด Stop ก่อน dispatch finish()
-  const [rankBeforeFinish] = useState<number | null>(() => consumeRankBeforeFinish());
-
-  const locationName = activeRoute?.name ?? 'วิ่งอิสระ';
-
-  const handleDone = () => {
-    reset();
-    dispatch({ type: 'NAV', screen: 'map' });
-  };
-
-  if (!lastResult) {
-    // กันไว้เฉยๆ เผื่อ dispatch แปลกๆ พาเข้ามาโดยไม่มีผลวิ่งจริง (ปกติไม่ควรเกิดขึ้น)
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <p className="font-body-md text-[#3d4a40]">ไม่พบผลการวิ่งล่าสุด</p>
-        <button
-          onClick={() => dispatch({ type: 'NAV', screen: 'map' })}
-          className="bg-[#006a3a] text-white px-6 py-3 rounded-full border-2 border-[#14241C] hard-shadow font-headline-md"
-        >
-          ไปที่แผนที่
-        </button>
-      </div>
-    );
+  if (!result) {
+    return <div className="py-20 text-center"><p className="font-headline-md">ไม่พบผลการวิ่งล่าสุด</p><button onClick={() => dispatch({ type: 'NAV', screen: 'run' })} className="mt-4 bg-[#0B8F55] text-white border-2 border-[#14241C] hard-shadow rounded-full px-5 py-3">เริ่มวิ่งใหม่</button></div>;
   }
 
-  const zoneCheckpoints = activeRoute ? activeRoute.checkpoints.filter((c) => c.kind !== 'start') : [];
-  // วิ่งอิสระไม่มี route.checkpoints ให้รวม coinReward — ใช้สูตรเดียวกับ RUN_FINISH ใน AppContext.tsx
-  // (จำนวน tower ที่เก็บได้ x 15) ไม่งั้น breakdown แถวนี้จะโชว์ 0 ทั้งที่ TOTAL จริงรวม tower coin ไปแล้ว
-  const checkpointCoins = activeRoute
-    ? activeRoute.checkpoints
-        .filter((c) => run.collectedCheckpointIds.includes(c.id))
-        .reduce((s, c) => s + c.coinReward, 0)
-    : run.collectedCheckpointIds.length * FREE_RUN_TOWER_REWARD;
-  // ใช้ run.distanceM ดิบ (ไม่ปัดทศนิยม) แทน lastResult.distanceKm ที่ปัดแล้ว
-  // เพื่อให้ตรงกับตัวเลขที่ reducer ใช้คำนวณ coinsEarned จริงเป๊ะๆ กัน breakdown บวกแล้วไม่เท่า TOTAL
-  const breakdown = coinsForRun(run.distanceM / 1000, checkpointCoins, user.streakDays);
+  const homeCenter = state.zones.find((zone) => zone.id === state.user.homeZoneId)?.center ?? { lat: 13.286, lng: 100.914 };
+  const achievement = result.distanceKm >= 10 ? '10K Hero' : result.distanceKm >= 5 ? '5K Finisher' : result.distanceKm >= 1 ? 'First Kilometer' : 'Fresh Start';
 
-  const board = activeRoute ? state.leaderboards[activeRoute.zoneId] ?? [] : [];
-  const rankAfter = myRank(board, user.id);
-  const rankDelta = rankBeforeFinish != null ? rankBeforeFinish - rankAfter : 0;
+  const save = () => {
+    try {
+      const key = 'runtown.save-check';
+      localStorage.setItem(key, '1'); localStorage.removeItem(key);
+      dispatch({ type: 'RUN_SAVE' });
+      setSaveError(null);
+    } catch {
+      setSaveError('บันทึกไม่สำเร็จ พื้นที่จัดเก็บของเบราว์เซอร์อาจถูกปิด ผลวิ่งยังอยู่หน้านี้ ลองอีกครั้งได้');
+    }
+  };
+
+  const goHome = (discard = false) => {
+    if (!state.lastResultSaved && !discard) { setConfirmLeave(true); return; }
+    reset(); dispatch({ type: 'NAV', screen: 'home' });
+  };
 
   return (
-    <div className="flex flex-col w-full gap-6 relative overflow-hidden -mt-2 pb-12">
-      {/* Confetti Animation Background */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <svg height="100%" width="100%" viewBox="0 0 400 800" xmlns="http://www.w3.org/2000/svg">
-          <rect className="confetti" fill="#FFD84D" height="12" width="12" x="10%" y="-20" style={{ animationDelay: '0.2s' }} />
-          <rect className="confetti" fill="#FF8A65" height="8" width="8" x="30%" y="-20" style={{ animationDelay: '1.5s' }} />
-          <rect className="confetti" fill="#006a3a" height="10" width="10" x="60%" y="-20" style={{ animationDelay: '0.8s' }} />
-          <rect className="confetti" fill="#14241C" height="14" width="14" x="85%" y="-20" style={{ animationDelay: '2.2s' }} />
-          <rect className="confetti" fill="#FFD84D" height="10" width="10" x="45%" y="-20" style={{ animationDelay: '3s' }} />
-          <rect className="confetti" fill="#006a3a" height="9" width="9" x="15%" y="-20" style={{ animationDelay: '4.5s' }} />
-        </svg>
+    <div className="flex flex-col gap-5 pb-8 relative">
+      <section className="text-center">
+        <div className="inline-grid place-items-center w-20 h-20 bg-[#FFD84D] border-2 border-[#14241C] hard-shadow-lg rounded-full text-4xl rotate-[-5deg]" aria-hidden="true">🏁</div>
+        <h1 className="font-headline-lg-mobile mt-4">วิ่งจบแล้ว!</h1>
+        <p className="font-handwritten-sm text-grass mt-1">Every step is progress.</p>
+        {!state.lastResultSaved && <span className="inline-flex mt-3 bg-[#FFF2B8] border-2 border-[#14241C] rounded-full px-3 py-1 text-xs font-label-md">ยังไม่บันทึก</span>}
+        {state.lastResultSaved && <span className="inline-flex mt-3 bg-[#DFF7E7] border-2 border-[#14241C] rounded-full px-3 py-1 text-xs font-label-md">✓ บันทึกในประวัติแล้ว</span>}
+      </section>
+
+      <section className="bg-white border-2 border-[#14241C] hard-shadow-lg rounded-2xl overflow-hidden" aria-label="แผนที่เส้นทางที่วิ่ง">
+        <div className="h-52 relative"><SummaryMap path={result.traveledPath ?? []} fallback={homeCenter} /><div className="absolute top-3 left-3 z-[400] bg-white border-2 border-[#14241C] hard-shadow-sm rounded-full px-3 py-1 text-xs font-label-md">{activeRoute?.name ?? 'วิ่งอิสระ'}</div></div>
+        <div className="grid grid-cols-2 gap-px bg-[#14241C] border-t-2 border-[#14241C]">
+          <div className="bg-white p-4"><span className="text-xs font-label-md text-ink-soft uppercase tracking-wide">ระยะทาง</span><p className="font-headline-md text-2xl">{result.distanceKm.toFixed(2)} km</p></div>
+          <div className="bg-white p-4"><span className="text-xs font-label-md text-ink-soft uppercase tracking-wide">เวลารวม</span><p className="font-headline-md text-2xl">{formatDuration(result.durationSec)}</p></div>
+          <div className="bg-white p-4"><span className="text-xs font-label-md text-ink-soft uppercase tracking-wide">เพซเฉลี่ย</span><p className="font-headline-md text-2xl">{formatPace(result.paceSec)} <span className="text-xs">min/km</span></p></div>
+          <div className="bg-lemon p-4"><span className="text-xs font-label-md uppercase tracking-wide">แคลอรี่โดยประมาณ*</span><p className="font-headline-md text-2xl">{result.caloriesKcal} kcal</p></div>
+        </div>
+      </section>
+
+      <section className="bg-white border-2 border-[#14241C] hard-shadow rounded-2xl p-4">
+        <h2 className="font-headline-md text-lg">รายละเอียดกิจกรรม</h2>
+        <dl className="mt-3 text-sm divide-y divide-dashed divide-[#AAB8AF]">
+          <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">เริ่ม</dt><dd className="text-right font-semibold">{dateTime(result.startedAt)}</dd></div>
+          <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">สิ้นสุด</dt><dd className="text-right font-semibold">{dateTime(result.finishedAt)}</dd></div>
+          <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">กิจกรรมวันที่</dt><dd className="text-right font-semibold">{new Date(result.finishedAt).toLocaleDateString('th-TH', { dateStyle: 'long' })}</dd></div>
+          <div className="flex justify-between py-2 gap-3"><dt className="text-ink-soft">GPS</dt><dd className="text-right font-semibold">ตัดจุดผิดปกติ {state.gps.rejectedPoints} จุด</dd></div>
+        </dl>
+      </section>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-[#FF9B8E] border-2 border-[#14241C] hard-shadow rounded-xl p-4 rotate-[-1deg]"><span className="text-xs font-label-md">ACHIEVEMENT</span><p className="font-headline-md text-lg mt-1">🏅 {achievement}</p></div>
+        <div className="bg-lemon border-2 border-ink hard-shadow rounded-xl p-4 rotate-[1deg]"><span className="text-xs font-label-md">REWARD</span><p className="font-headline-md text-lg mt-1">+{result.coinsEarned} coins</p><p className="text-xs text-ink-soft">ได้รับเมื่อบันทึก</p></div>
       </div>
 
-      {/* Title Section */}
-      <div className="flex flex-col items-center justify-center pt-2 z-10">
-        <h1 className="font-headline-lg-mobile text-3xl text-[#14241C] uppercase text-center font-bold">
-          วิ่งจบแล้ว!
-        </h1>
+      <p className="text-xs leading-relaxed text-ink-soft px-2">*แคลอรี่เป็นค่าประมาณจากน้ำหนัก × ระยะทาง ไม่ใช่ค่าทางการแพทย์ ผลจริงแตกต่างตามความเร็ว ความชัน อายุ องค์ประกอบร่างกาย และสมรรถภาพ</p>
 
-        {/* Reward Coin Sticker */}
-        <div className="relative mt-6 transition-transform hover:scale-105 duration-300 cursor-pointer">
-          <div className="w-32 h-32 bg-[#FFD84D] border-2 border-[#14241C] rounded-full flex flex-col items-center justify-center hard-shadow rotate-[-6deg] ring-[6px] ring-white">
-            <span className="font-headline-lg text-[48px] leading-none text-[#14241C]">+{lastResult.coinsEarned}</span>
-            <span className="font-label-md text-sm text-[#14241C] uppercase mt-1">coin ที่ได้</span>
-          </div>
-          <div className="absolute -top-3 -right-3 bg-[#FF8A65] border-2 border-[#14241C] text-white px-3 py-1 rounded-full hard-shadow rotate-[12deg] font-label-md text-xs font-bold">
-            {breakdown.capped ? 'DAILY CAP!' : 'NEW RECORD!'}
-          </div>
-        </div>
+      {saveError && <div role="alert" className="bg-[#FFD7D2] border-2 border-[#14241C] hard-shadow-sm rounded-xl p-3 text-sm">{saveError}</div>}
+      <div className="flex flex-col gap-3">
+        <button onClick={save} disabled={state.lastResultSaved} className="min-h-14 bg-grass disabled:bg-grass-soft text-white disabled:text-ink border-2 border-ink hard-shadow rounded-full font-headline-md text-base flex justify-center items-center gap-2 active:translate-y-0.5 active:shadow-none"><span className="material-symbols-outlined" aria-hidden="true">save</span>{state.lastResultSaved ? 'บันทึกกิจกรรมแล้ว' : 'บันทึกกิจกรรม'}</button>
+        <button onClick={() => setShowShare(true)} className="min-h-14 bg-[#FFD84D] border-2 border-[#14241C] hard-shadow rounded-full font-headline-md text-base flex justify-center items-center gap-2 active:translate-y-0.5 active:shadow-none"><span className="material-symbols-outlined" aria-hidden="true">ios_share</span>แชร์ผลวิ่ง</button>
+        <button onClick={() => goHome()} className="min-h-12 bg-white border-2 border-[#14241C] hard-shadow rounded-full font-label-md active:translate-y-0.5 active:shadow-none">กลับหน้าหลัก</button>
       </div>
 
-      {/* Signature Receipt Card */}
-      <div className="relative z-10 px-1">
-        <div className="bg-white border-2 border-[#14241C] hard-shadow p-6 flex flex-col gap-4 relative">
-          {/* Receipt Top Decorative Holes */}
-          <div className="absolute -top-1 left-0 right-0 flex justify-around px-4">
-            <div className="w-3 h-3 bg-[#F2F7F3] rounded-full border-b-2 border-[#14241C]"></div>
-            <div className="w-3 h-3 bg-[#F2F7F3] rounded-full border-b-2 border-[#14241C]"></div>
-            <div className="w-3 h-3 bg-[#F2F7F3] rounded-full border-b-2 border-[#14241C]"></div>
-            <div className="w-3 h-3 bg-[#F2F7F3] rounded-full border-b-2 border-[#14241C]"></div>
-          </div>
-
-          <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-            <span className="font-label-md">Distance {lastResult.distanceKm} km</span>
-            <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-            <span className="font-headline-md text-base">+{breakdown.fromDistance}</span>
-          </div>
-
-          <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-            <span className="font-label-md">
-              {activeRoute
-                ? `Checkpoints ${lastResult.checkpointsCollected}/${zoneCheckpoints.length}`
-                : `Checkpoints เก็บได้ ${lastResult.checkpointsCollected} จุด`}
-            </span>
-            <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-            <span className="font-headline-md text-base">+{breakdown.fromCheckpoints}</span>
-          </div>
-
-          <div className="flex justify-between items-baseline font-body-md text-[#14241C]">
-            <span className="font-label-md">Streak {user.streakDays} days</span>
-            <div className="flex-1 border-b-2 border-dotted border-[#bccabd] mx-2 mb-1"></div>
-            <span className="font-headline-md text-base">+{breakdown.fromStreak}</span>
-          </div>
-
-          <div className="flex justify-between items-baseline font-body-md text-[#3d4a40]/60">
-            <span className="font-label-md italic">Daily cap</span>
-            <div className="flex-1 border-b-2 border-dotted border-[#bccabd]/40 mx-2 mb-1"></div>
-            <span className="font-label-md">300</span>
-          </div>
-
-          <div className="mt-2 pt-4 border-t-2 border-[#14241C] flex justify-between items-center">
-            <span className="font-headline-md text-xl uppercase">TOTAL</span>
-            <span className="font-headline-lg text-3xl text-[#14241C]">{lastResult.coinsEarned}</span>
-          </div>
-
-          {/* Torn Zigzag Edge */}
-          <div className="absolute -bottom-3 left-0 right-0 h-3 overflow-hidden flex">
-            {Array.from({ length: 25 }).map((_, idx) => (
-              <div key={idx} className="w-4 h-4 bg-white border-r-2 border-b-2 border-[#14241C] rotate-45 -translate-y-2 translate-x-[-2px] flex-shrink-0" />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Sticker Grid */}
-      <div className="grid grid-cols-2 gap-3 px-1 mt-2 z-10">
-        <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[-2deg] flex flex-col">
-          <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Distance</span>
-          <span className="font-headline-md text-xl text-[#14241C]">{lastResult.distanceKm} <span className="text-xs">km</span></span>
-        </div>
-
-        <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[3deg] flex flex-col">
-          <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Time</span>
-          <span className="font-headline-md text-xl text-[#14241C]">{formatDuration(lastResult.durationSec)}</span>
-        </div>
-
-        <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[1deg] flex flex-col">
-          <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Avg Pace</span>
-          <span className="font-headline-md text-xl text-[#14241C]">{formatPace(lastResult.paceSec)}</span>
-        </div>
-
-        <div className="bg-white border-2 border-[#14241C] hard-shadow p-3 rounded-xl rotate-[-3deg] flex flex-col">
-          <span className="text-[10px] font-label-md text-[#3d4a40] uppercase">Calories</span>
-          <span className="font-headline-md text-xl text-[#14241C]">{lastResult.caloriesKcal} <span className="text-xs">kcal</span></span>
-        </div>
-      </div>
-
-      {/* Rank Improvement Card — วิ่งอิสระไม่มีโซน ไม่มี leaderboard ให้เทียบ ซ่อนไปเลย */}
-      {activeRoute && (
-        <div className="bg-[#006a3a] border-2 border-[#14241C] hard-shadow rounded-2xl p-4 flex items-center justify-between mx-1 z-10">
-          <div className="flex flex-col">
-            <span className="font-handwritten-sm text-white/90">{locationName}</span>
-            <span className="font-headline-md text-white uppercase text-lg leading-tight">
-              {rankDelta > 0 ? 'Rank Improved!' : 'Rank'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {rankBeforeFinish != null && rankBeforeFinish !== rankAfter && (
-              <span className="font-headline-md text-white/50 line-through text-lg">#{rankBeforeFinish}</span>
-            )}
-            <div className="relative">
-              <div className="bg-[#FFD84D] border-2 border-[#14241C] px-3 py-1 rounded-xl hard-shadow rotate-[-4deg]">
-                <span className="font-headline-lg text-2xl text-[#14241C]">#{rankAfter}</span>
-              </div>
-              {rankDelta > 0 && (
-                <div className="absolute -top-3 -right-3 bg-[#FF8A65] border-2 border-[#14241C] rounded-full px-2 py-0.5 text-white font-label-md text-xs hard-shadow">
-                  +{rankDelta}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sensor Verification Note */}
-      <div className="flex items-center justify-center gap-2 px-4 py-1">
-        <span className="material-symbols-outlined text-[#3d4a40] text-sm">verified_user</span>
-        <span className="text-[12px] font-body-md text-[#3d4a40]">
-          ตรวจสอบด้วยเซนเซอร์การเคลื่อนไหว + GPS{lastResult.mode === 'simulate' ? ' (โหมดจำลอง — SIMULATED)' : ''}
-        </span>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-col gap-3 px-1 z-10">
-        <button
-          onClick={() => dispatch({ type: 'NAV', screen: 'shop' })}
-          className="w-full bg-[#006a3a] hover:bg-[#00864b] py-3.5 rounded-full border-2 border-[#14241C] hard-shadow flex items-center justify-center gap-2 active:translate-y-[2px] transition-all"
-        >
-          <span className="material-symbols-outlined text-white">shopping_bag</span>
-          <span className="font-headline-md text-white uppercase text-base">ใช้ coin (ไปร้านค้า)</span>
-        </button>
-
-        <button
-          onClick={handleDone}
-          className="w-full bg-white hover:bg-[#ebfef1] py-3.5 rounded-full border-2 border-[#14241C] hard-shadow flex items-center justify-center gap-2 active:translate-y-[2px] transition-all"
-        >
-          <span className="font-headline-md text-[#14241C] uppercase text-base">เสร็จสิ้น</span>
-        </button>
-      </div>
+      {showShare && <ShareResultSheet record={result} user={state.user} onClose={() => setShowShare(false)} />}
+      {confirmLeave && <div className="fixed inset-y-0 left-1/2 -translate-x-1/2 w-full max-w-md z-[850] bg-ink/60 p-4 grid place-items-center" role="dialog" aria-modal="true" aria-labelledby="unsaved-title"><div className="bg-paper border-2 border-ink hard-shadow-lg rounded-2xl p-5"><div className="text-4xl">📝</div><h2 id="unsaved-title" className="font-headline-md text-xl mt-3">กิจกรรมยังไม่บันทึก</h2><p className="text-sm mt-2 text-ink-soft">ถ้ากลับตอนนี้ กิจกรรมนี้จะไม่ถูกเพิ่มในประวัติและจะไม่ได้รับ coins</p><div className="grid grid-cols-2 gap-3 mt-5"><button onClick={() => setConfirmLeave(false)} className="min-h-12 bg-white border-2 border-ink rounded-full font-label-md">อยู่หน้านี้</button><button onClick={() => goHome(true)} className="min-h-12 bg-coral text-ink border-2 border-ink rounded-full font-label-md">ทิ้งกิจกรรม</button></div></div></div>}
     </div>
   );
 };

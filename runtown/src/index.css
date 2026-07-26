@@ -1,10 +1,24 @@
 @import "tailwindcss";
 
+@theme {
+  --color-ink: #14241C;
+  --color-ink-soft: #42564A;
+  --color-ink-muted: #5C6F63;
+  --color-grass: #087A49;
+  --color-grass-soft: #A9E5C0;
+  --color-coral: #FF7A6D;
+  --color-lemon: #FFD84D;
+  --color-paper: #F2F7F3;
+}
+
 @layer base {
   body {
-    background-color: #F2F7F3;
-    color: #0f1f17;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
     font-family: 'Anuphan', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
     -webkit-tap-highlight-color: transparent;
   }
   .pb-safe {
@@ -27,6 +41,73 @@
   box-shadow: 2px 2px 0px 0px #14241C;
 }
 
+.hard-shadow-up {
+  box-shadow: 0 -5px 0 0 #14241C;
+}
+
+.runner-map-avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  isolation: isolate;
+}
+
+.runner-map-avatar-crop {
+  display: block;
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  background: #bcebc8;
+  border: 3px solid #fffdf4;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #075c35, 0 5px 0 rgb(7 92 53 / 0.28);
+}
+
+.runner-map-avatar-crop img {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: 100px !important;
+  max-width: none !important;
+  height: auto !important;
+  transform: translate(-50%, -35%);
+  pointer-events: none;
+}
+
+.runner-map-avatar-pulse {
+  position: absolute;
+  z-index: -1;
+  inset: -10px;
+  border: 3px solid rgb(54 184 90 / 0.55);
+  border-radius: 50%;
+  animation: runner-location-pulse 1.8s ease-out infinite;
+}
+
+@keyframes runner-location-pulse {
+  0% { transform: scale(0.72); opacity: 0.9; }
+  75%, 100% { transform: scale(1.55); opacity: 0; }
+}
+
+.run-map-vignette {
+  background: linear-gradient(to bottom, rgba(20, 36, 28, 0.2), transparent 22%, transparent 50%, rgba(20, 36, 28, 0.08));
+}
+
+button, input, select {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #FF5D50;
+  outline-offset: 3px;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -35,54 +116,58 @@
   scrollbar-width: none;
 }
 
-.font-headline-lg {
-  font-family: 'Mitr', sans-serif;
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.font-headline-md {
-  font-family: 'Mitr', sans-serif;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.font-display-lg {
-  font-family: 'Mitr', sans-serif;
-  font-size: 48px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-.font-body-lg {
-  font-family: 'Anuphan', sans-serif;
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-.font-body-md {
-  font-family: 'Anuphan', sans-serif;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.5;
-}
-.font-label-md {
-  font-family: 'Anuphan', sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.font-handwritten-sm {
-  font-family: 'Mali', cursive;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.2;
-}
-.font-headline-lg-mobile {
-  font-family: 'Mitr', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.2;
+/* Kept in the components layer so Tailwind text-size utilities can override
+   the defaults. Previously these unlayered rules forced every headline to 24px. */
+@layer components {
+  .font-headline-lg {
+    font-family: 'Mitr', sans-serif;
+    font-size: clamp(1.75rem, 7vw, 2rem);
+    font-weight: 700;
+    line-height: 1.18;
+  }
+  .font-headline-md {
+    font-family: 'Mitr', sans-serif;
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .font-display-lg {
+    font-family: 'Mitr', sans-serif;
+    font-size: clamp(2.5rem, 12vw, 3rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+  }
+  .font-body-lg {
+    font-family: 'Anuphan', sans-serif;
+    font-size: 1.0625rem;
+    font-weight: 500;
+    line-height: 1.55;
+  }
+  .font-body-md {
+    font-family: 'Anuphan', sans-serif;
+    font-size: 0.9375rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+  .font-label-md {
+    font-family: 'Anuphan', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .font-handwritten-sm {
+    font-family: 'Mali', cursive;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .font-headline-lg-mobile {
+    font-family: 'Mitr', sans-serif;
+    font-size: clamp(1.5625rem, 7.2vw, 1.75rem);
+    font-weight: 700;
+    line-height: 1.2;
+  }
 }
 
 @keyframes drift {
@@ -115,3 +200,65 @@
   to   { transform: rotateY(360deg); }
 }
 .animate-spin-y { animation: spin-y 1.5s linear infinite; }
+
+/* A restrained print texture for share postcards. It adds tactility without
+   competing with the route, stats, or the illustrated runner. */
+.share-paper-texture {
+  background-image:
+    radial-gradient(circle, rgb(23 24 21 / 0.08) 0.7px, transparent 0.9px),
+    radial-gradient(circle, rgb(255 255 255 / 0.14) 0.6px, transparent 0.8px);
+  background-position: 0 0, 4px 5px;
+  background-size: 9px 9px, 13px 13px;
+}
+
+.share-sticker-card {
+  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.28));
+}
+
+.share-sticker-number {
+  -webkit-text-stroke: 3px #fff;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgb(7 92 53 / 0.22);
+}
+
+.share-transparent-grid {
+  background-color: #eef0ee;
+  background-image:
+    linear-gradient(45deg, #d9ddda 25%, transparent 25%),
+    linear-gradient(-45deg, #d9ddda 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d9ddda 75%),
+    linear-gradient(-45deg, transparent 75%, #d9ddda 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.share-route-pig-head {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  background: #bcebc8;
+  border: 3px solid #fffdf4;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #075c35, 0 3px 0 rgb(7 92 53 / 0.25);
+}
+
+.share-route-pig-head img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 79px !important;
+  max-width: none !important;
+  height: auto !important;
+  transform: translate(-50%, -35%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -8,6 +8,9 @@ import { RunTab } from './components/RunTab';
 import { ShopTab } from './components/ShopTab';
 import { PlanTab } from './components/PlanTab';
 import { ProfileTab } from './components/ProfileTab';
+import { HomeTab } from './components/HomeTab';
+import { RankingTab } from './components/RankingTab';
+import { RunStartScreen } from './components/RunStartScreen';
 
 const TOAST_TONE_CLASS: Record<'info' | 'success' | 'warn', string> = {
   info: 'bg-[#14241C] text-white',
@@ -51,10 +54,14 @@ function CurrentScreen() {
   const { state } = useApp();
 
   switch (state.ui.screen) {
+    case 'home':
+      return <HomeTab />;
     case 'map':
     case 'zone':
       return <MapTab />;
     case 'run':
+      if (state.run.status === 'idle') return <RunStartScreen />;
+      if (state.run.status === 'finished') return <RunTab />;
       return <ActiveRunScreen />;
     case 'finish':
       return <RunTab />;
@@ -62,6 +69,8 @@ function CurrentScreen() {
       return <ShopTab />;
     case 'planner':
       return <PlanTab />;
+    case 'ranking':
+      return <RankingTab />;
     case 'profile':
       return <ProfileTab />;
     default:
@@ -71,22 +80,21 @@ function CurrentScreen() {
 
 function Shell() {
   const { state } = useApp();
-  // หน้า 'run' เป็นฉากเกมเต็มจอ ไม่มี bottom nav ในดีไซน์ต้นฉบับ (มีปุ่ม pause/stop/lock ของตัวเองแทน)
-  const isRunScreen = state.ui.screen === 'run';
+  const isRunScreen = state.ui.screen === 'run' && ['countdown', 'running', 'paused'].includes(state.run.status);
 
   return (
     // กรอบแอปตัวจริง — ตัวเดียวที่ fixed ต่อ viewport (ตรงกลาง, กว้างเท่าจอมือถือ)
     // Header/Navbar/ToastStack/modal ทั้งหมดข้างในเปลี่ยนเป็น absolute แล้วอิงกรอบนี้แทน
     // ไม่งั้นบน desktop browser (viewport กว้างกว่าการ์ด) fixed เดิมจะไปอิง viewport เต็มจอ
     // ทำให้ nav ล่างเลื่อนหลุดไปคนละตำแหน่งกับตัวการ์ด
-    <div className="fixed inset-y-0 left-1/2 -translate-x-1/2 w-full max-w-md flex flex-col font-body-md text-[#0f1f17] bg-[#F2F7F3] shadow-2xl overflow-hidden">
-      <Header />
+    <div className="fixed inset-y-0 left-1/2 -translate-x-1/2 w-full max-w-md flex flex-col font-body-md text-ink bg-paper shadow-2xl overflow-hidden">
+      {!isRunScreen && <Header />}
       <ToastStack />
       <main
         className={
           isRunScreen
             ? 'flex-1 relative overflow-hidden pt-16'
-            : 'flex-1 overflow-y-auto pt-20 pb-28 bg-[#F2F7F3] px-4'
+            : 'flex-1 overflow-y-auto pt-20 pb-28 bg-paper px-4'
         }
       >
         <CurrentScreen />

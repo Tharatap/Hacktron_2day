@@ -89,10 +89,22 @@ export function speedKmh(distanceM: number, elapsedSec: number): number {
 
 /** 372 -> "6'12"" */
 export function formatPace(paceSec: number): string {
-  if (!paceSec || paceSec <= 0 || !isFinite(paceSec)) return "--'--\"";
-  const m = Math.floor(paceSec / 60);
-  const s = Math.round(paceSec % 60);
-  return `${m}'${String(s).padStart(2, '0')}"`;
+  if (!paceSec || paceSec <= 0 || !isFinite(paceSec)) return '--:--';
+  let m = Math.floor(paceSec / 60);
+  let s = Math.round(paceSec % 60);
+  if (s === 60) {
+    m += 1;
+    s = 0;
+  }
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** MVP estimate requested by the product brief: weight (kg) × distance (km). */
+export function estimatedCalories(weightKg: number, distanceKm: number): number {
+  if (!Number.isFinite(weightKg) || !Number.isFinite(distanceKm) || weightKg <= 0 || distanceKm <= 0) {
+    return 0;
+  }
+  return Math.round(weightKg * distanceKm);
 }
 
 /** 3725 -> "1:02:05" */

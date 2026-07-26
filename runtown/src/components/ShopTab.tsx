@@ -134,7 +134,7 @@ export const ShopTab: React.FC = () => {
                     {reward.title}
                   </h3>
                   {merchant && (
-                    <p className="font-label-md text-xs text-[#3d4a40]">📍 {merchant.district}</p>
+              <p className="font-label-md text-xs text-ink-soft">📍 {merchant.district}</p>
                   )}
                   <p className="font-body-md text-sm text-[#14241C] mt-1 line-clamp-2">
                     {merchant?.blurb}
@@ -199,7 +199,7 @@ export const ShopTab: React.FC = () => {
                 <h3 className="font-headline-md text-xl text-[#14241C] mb-1">
                   {selectedReward.title}
                 </h3>
-                <p className="font-body-md text-sm text-[#3d4a40] mb-4">
+                <p className="font-body-md text-sm text-ink-soft mb-4">
                   {merchantOf(selectedReward)?.blurb}
                 </p>
 
@@ -228,7 +228,7 @@ export const ShopTab: React.FC = () => {
                   🎉
                 </div>
                 <h3 className="font-headline-md text-xl text-[#14241C] mb-1">แลกรับสำเร็จแล้ว!</h3>
-                <p className="font-body-md text-xs text-[#3d4a40] mb-4">
+                <p className="font-body-md text-xs text-ink-soft mb-4">
                   แสดงรหัสคูปองนี้ให้พนักงานหน้าร้าน {selectedReward.title}
                 </p>
 

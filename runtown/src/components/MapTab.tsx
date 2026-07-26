@@ -105,12 +105,12 @@ export const MapTab: React.FC = () => {
       </div>
 
       {/* Live Banner */}
-      <div className="w-full bg-[#FF6B5A] border-2 border-[#14241C] rounded-xl p-2 mb-4 hard-shadow flex items-center justify-center gap-2 overflow-hidden">
+      <div className="w-full bg-coral text-ink border-2 border-ink rounded-xl p-2 mb-4 hard-shadow flex items-center justify-center gap-2 overflow-hidden">
         <div className="relative flex h-3 w-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ink opacity-40"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-ink"></span>
         </div>
-        <span className="font-label-md text-white text-base font-semibold">
+        <span className="font-label-md text-ink text-base font-semibold">
           ตอนนี้มีคนวิ่งในชลบุรี {liveRunnerTotal} คน
         </span>
       </div>
@@ -198,7 +198,7 @@ export const MapTab: React.FC = () => {
                     src={zoneArt.image}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute -top-3 -right-3 bg-[#FFD84D] border-2 border-[#14241C] rounded-full px-2 py-0.5 text-[11px] font-headline-md hard-shadow">
+                  <div className="absolute -top-3 -right-3 bg-lemon border-2 border-ink rounded-full px-2 py-0.5 text-xs font-headline-md hard-shadow">
                     {zone.liveRunners}
                   </div>
                 </div>
@@ -228,7 +228,7 @@ export const MapTab: React.FC = () => {
               </div>
             </div>
 
-            <p className="font-body-md text-sm text-[#3d4a40] mb-1">
+            <p className="font-body-md text-sm text-ink-soft mb-1">
               📍 {selectedZone.district} • {selectedZone.loopDistanceKm} km loop
             </p>
 
@@ -258,7 +258,7 @@ export const MapTab: React.FC = () => {
               className={`pb-2 font-headline-md text-base transition-colors ${
                 subTab === tab
                   ? 'border-b-4 border-[#FFD84D] text-[#14241C]'
-                  : 'text-[#6d7a6f] hover:text-[#14241C]'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               {tab}
@@ -291,10 +291,10 @@ export const MapTab: React.FC = () => {
                       <span className="font-headline-md text-sm text-[#14241C] flex items-center gap-1">
                         {entry.name}
                         {entry.isMe && (
-                          <span className="bg-[#14241C] text-white text-[10px] px-1.5 py-0.2 rounded">นี่คุณ!</span>
+                          <span className="bg-ink text-white text-xs px-1.5 py-0.5 rounded">นี่คุณ!</span>
                         )}
                       </span>
-                      <span className="text-[11px] text-[#3d4a40]">
+                      <span className="text-xs text-ink-soft">
                         {tierInfo(entry.paceTier).labelTh} • {formatPace(entry.paceSec)}
                       </span>
                     </div>
@@ -312,7 +312,7 @@ export const MapTab: React.FC = () => {
         {subTab === 'Routes' && (
           <div className="p-3 bg-[#e5f8eb] rounded-xl border-2 border-[#14241C] mb-5 text-sm">
             <p className="font-semibold mb-1">🏃‍♂️ เส้นทางวิ่งรอบ{selectedZone.name}</p>
-            <p className="text-xs text-[#3d4a40] mb-2">{selectedZone.description}</p>
+            <p className="text-xs text-ink-soft mb-2">{selectedZone.description}</p>
             <div className="flex gap-2">
               <span className="bg-white border border-[#14241C] px-2 py-1 rounded text-xs font-bold">จุดเช็คพอยท์: {towerCount} จุด</span>
               <span className="bg-white border border-[#14241C] px-2 py-1 rounded text-xs font-bold">ห้องน้ำ: {selectedZone.hasToilet ? 'มีบริการ' : 'ไม่มี'}</span>

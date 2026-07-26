@@ -218,6 +218,19 @@ export interface SensorState {
 
 export type RunStatus = 'idle' | 'countdown' | 'running' | 'paused' | 'finished';
 
+export type GpsPermission = 'unknown' | 'granted' | 'denied' | 'unsupported';
+export type GpsQuality = 'idle' | 'loading' | 'good' | 'weak' | 'unavailable' | 'demo';
+
+export interface GpsState {
+  permission: GpsPermission;
+  quality: GpsQuality;
+  accuracyM: number | null;
+  lastFixAt: number | null;
+  rejectedPoints: number;
+  message: string;
+  lastPosition: LatLng | null;
+}
+
 export interface RunSession {
   status: RunStatus;
   routeId: string | null;
@@ -239,6 +252,7 @@ export interface RunRecord {
   id: string;
   routeId: string;
   zoneId: string;
+  startedAt: number;
   finishedAt: number;
   distanceKm: number;
   durationSec: number;
@@ -247,6 +261,7 @@ export interface RunRecord {
   coinsEarned: number;
   checkpointsCollected: number;
   mode: TrackingMode;
+  traveledPath: LatLng[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -286,7 +301,7 @@ export interface PlannerState {
 /* UI / navigation                                                     */
 /* ------------------------------------------------------------------ */
 
-export type Screen = 'map' | 'zone' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
+export type Screen = 'home' | 'map' | 'zone' | 'ranking' | 'run' | 'finish' | 'shop' | 'planner' | 'profile';
 
 export interface Toast {
   id: string;
@@ -316,12 +331,15 @@ export interface AppState {
   chat: Record<string, ChatMessage[]>;
   leaderboards: Record<string, LeaderboardEntry[]>;
   run: RunSession;
+  gps: GpsState;
   sensor: SensorState;
   planner: PlannerState;
   history: RunRecord[];
   ui: UIState;
   /** ผลลัพธ์ของรอบวิ่งล่าสุด ใช้ส่งข้ามหน้า Run -> Finish */
   lastResult: RunRecord | null;
+  /** ประวัติจะเพิ่มเมื่อผู้ใช้กดบันทึกสำเร็จเท่านั้น */
+  lastResultSaved: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,6 +349,7 @@ export interface AppState {
 export type Action =
   // navigation
   | { type: 'NAV'; screen: Screen }
+  | { type: 'USER_WEIGHT_SET'; weightKg: number }
   | { type: 'SELECT_ZONE'; zoneId: string }
   | { type: 'SELECT_ROUTE'; routeId: string }
   // sensor
@@ -346,9 +365,10 @@ export type Action =
   /** เรียกทุก 1 วินาทีจาก useRunEngine — newSteps คือก้าวที่ตรวจได้ในวินาทีนั้น */
   | { type: 'RUN_TICK'; newSteps: number; cadence: number }
   | { type: 'RUN_FINISH' }
+  | { type: 'RUN_SAVE' }
   | { type: 'RUN_RESET' }
-  /** ใช้แค่วาด minimap ตอนวิ่งอิสระ ไม่เกี่ยวกับการคำนวณระยะ/pace/kcal ซึ่งยังมาจากก้าวเหมือนเดิม */
-  | { type: 'RUN_GPS_UPDATE'; position: LatLng }
+  | { type: 'GPS_STATUS'; permission?: GpsPermission; quality: GpsQuality; accuracyM?: number | null; message: string }
+  | { type: 'RUN_GPS_UPDATE'; position: LatLng; accuracyM: number; timestamp: number }
   // shop
   | { type: 'REDEEM'; rewardId: string }
   // planner
